@@ -80,11 +80,13 @@ def get_openai_client(user_id: str = ""):
     key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY, user_id)
     return openai.OpenAI(api_key=key) if key else None
 
-_app_url = ""
+# URL pública do Railway (disponível como env var)
+_railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+_app_url = f"https://{_railway_domain}" if _railway_domain else ""
+
 
 async def job_keepalive():
     """Ping no próprio app a cada 4 min para evitar sleep do Railway."""
-    global _app_url
     if not _app_url:
         return
     try:
@@ -95,6 +97,30 @@ async def job_keepalive():
         print(f"[KEEPALIVE ERRO] {e}")
 
 
+async def auto_registrar_webhook():
+    """Registra o webhook automaticamente na inicialização."""
+    if not _app_url:
+        print("[WEBHOOK AUTO] RAILWAY_PUBLIC_DOMAIN não definido, pulando auto-registro")
+        return
+    try:
+        webhook_url = f"{_app_url}/telegram/webhook"
+        token = get_bot_token()
+        if not token:
+            return
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{token}/setWebhook",
+                json={"url": webhook_url, "allowed_updates": [
+                    "channel_post", "message_reaction",
+                    "message_reaction_count", "chat_member"
+                ]},
+            )
+        result = resp.json()
+        print(f"[WEBHOOK AUTO] {result}")
+    except Exception as e:
+        print(f"[WEBHOOK AUTO ERRO] {e}")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler.add_job(verificar_e_enviar_posts,  "interval", minutes=1,  id="check_posts")
@@ -102,7 +128,8 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(job_capturar_membros,      "interval", hours=1,    id="capturar_membros")
     scheduler.add_job(job_keepalive,             "interval", minutes=4,  id="keepalive")
     scheduler.start()
-    print("[SCHEDULER] Iniciado — verificando posts a cada minuto")
+    print(f"[SCHEDULER] Iniciado | URL: {_app_url or 'local'}")
+    await auto_registrar_webhook()
     yield
     scheduler.shutdown()
 
