@@ -762,8 +762,8 @@
     <!-- ═══════════════ RELATÓRIOS ═══════════════ -->
     <div class="section" id="section-relatorios">
 
-      <!-- Cards de resumo -->
-      <div class="cards-grid" style="margin-bottom:20px;">
+      <!-- Cards de resumo — linha 1 -->
+      <div class="cards-grid" style="margin-bottom:12px;">
         <div class="card card-accent">
           <div class="card-label">Posts no Canal</div>
           <div class="card-value" id="rel-total-posts">—</div>
@@ -780,10 +780,46 @@
           <div class="card-sub">Membros que saíram</div>
         </div>
         <div class="card card-green">
+          <div class="card-label">Média de Reações</div>
+          <div class="card-value" id="rel-media-reacoes">—</div>
+          <div class="card-sub">Por post publicado</div>
+        </div>
+      </div>
+
+      <!-- Cards — linha 2 -->
+      <div class="cards-grid" style="margin-bottom:20px;">
+        <div class="card" style="border-color:#0ea5e9;">
+          <div class="card-label">Membros Atuais</div>
+          <div class="card-value" id="rel-membros-atual" style="color:#38bdf8;">—</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+            <span class="card-sub" id="rel-membros-sub">—</span>
+            <button class="btn btn-secondary" style="padding:3px 8px;font-size:.7rem;" onclick="capturarMembrosAgora()">Atualizar</button>
+          </div>
+        </div>
+        <div class="card" style="border-color:#f59e0b;">
+          <div class="card-label">Melhor Horário</div>
+          <div class="card-value" id="rel-melhor-hora" style="color:#fbbf24;">—</div>
+          <div class="card-sub">Hora com mais reações</div>
+        </div>
+        <div class="card" style="border-color:#ef4444;">
+          <div class="card-label">Posts Virais 🔥</div>
+          <div class="card-value" id="rel-virais" style="color:#f87171;">—</div>
+          <div class="card-sub">Acima de 2× a média</div>
+        </div>
+        <div class="card" style="border-color:#10b981;">
           <div class="card-label">Taxa de Engajamento</div>
-          <div class="card-value" id="rel-taxa-eng">—</div>
+          <div class="card-value" id="rel-taxa-eng" style="color:#34d399;">—</div>
           <div class="card-sub">Reações / Posts</div>
         </div>
+      </div>
+
+      <!-- Gráfico: Crescimento de membros (full width) -->
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-title" style="color:#38bdf8;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Crescimento de Membros
+        </div>
+        <div style="position:relative;height:180px;"><canvas id="chart-membros"></canvas></div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
@@ -806,7 +842,7 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
         <!-- Gráfico: Saídas por dia -->
         <div class="panel">
           <div class="panel-title" style="color:#ef4444;">
@@ -816,19 +852,56 @@
           <div style="position:relative;height:200px;"><canvas id="chart-saidas-dia"></canvas></div>
         </div>
 
-        <!-- Gráfico: Top posts engajados -->
+        <!-- Gráfico: Reações por hora do dia -->
         <div class="panel">
           <div class="panel-title" style="color:#f59e0b;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Posts Mais Engajados
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Média de Reações por Hora
           </div>
-          <div style="position:relative;height:200px;"><canvas id="chart-top-posts"></canvas></div>
+          <div style="position:relative;height:200px;"><canvas id="chart-hora"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Top posts virais: lista clicável -->
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-title" style="color:#f59e0b;margin-bottom:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Posts Mais Engajados
+          <span style="font-size:.75rem;color:#6b7280;font-weight:400;margin-left:6px;">clique para detalhes</span>
+        </div>
+        <div id="rel-top-lista">
+          <div class="empty" style="padding:16px 0;">
+            <p>Nenhum dado ainda</p>
+          </div>
         </div>
       </div>
 
       <div id="rel-empty" class="empty" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
         <p>Nenhum dado ainda — publique posts no canal e registre o webhook</p>
+      </div>
+    </div>
+
+    <!-- Modal de detalhe do post -->
+    <div id="post-modal-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:200;align-items:center;justify-content:center;">
+      <div style="background:#151929;border:1px solid #2d3347;border-radius:14px;padding:28px;max-width:480px;width:90%;position:relative;">
+        <button onclick="fecharModalPost()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#6b7280;font-size:1.2rem;cursor:pointer;">✕</button>
+        <div style="font-size:.75rem;color:#6b7280;margin-bottom:8px;" id="modal-data">—</div>
+        <div style="color:#f9fafb;font-size:.95rem;line-height:1.6;margin-bottom:20px;" id="modal-texto">—</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center;">
+          <div style="background:#1e2235;border-radius:8px;padding:12px;">
+            <div style="font-size:1.4rem;font-weight:700;color:#a855f7;" id="modal-reacoes">—</div>
+            <div style="font-size:.72rem;color:#6b7280;">Reações</div>
+          </div>
+          <div style="background:#1e2235;border-radius:8px;padding:12px;">
+            <div style="font-size:1.4rem;font-weight:700;color:#38bdf8;" id="modal-vs-media">—</div>
+            <div style="font-size:.72rem;color:#6b7280;">vs média</div>
+          </div>
+          <div style="background:#1e2235;border-radius:8px;padding:12px;" id="modal-viral-box">
+            <div style="font-size:1.4rem;" id="modal-viral-icon">—</div>
+            <div style="font-size:.72rem;color:#6b7280;" id="modal-viral-txt">—</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1659,36 +1732,78 @@ const chartDefaults = {
   },
 };
 
+let _analyticsData = null;
+
 async function carregarRelatorios() {
   try {
     const r = await authFetch('/analytics');
     const d = await r.json();
     if (!r.ok) { toast('Erro ao carregar relatórios', 'error'); return; }
+    _analyticsData = d;
 
-    // Cards de resumo
-    document.getElementById('rel-total-posts').textContent = d.total_posts ?? 0;
-    document.getElementById('rel-total-reacoes').textContent = d.total_reacoes ?? 0;
-    document.getElementById('rel-total-saidas').textContent = d.total_saidas ?? 0;
+    // ── Cards ──
+    document.getElementById('rel-total-posts').textContent    = d.total_posts ?? 0;
+    document.getElementById('rel-total-reacoes').textContent  = d.total_reacoes ?? 0;
+    document.getElementById('rel-total-saidas').textContent   = d.total_saidas ?? 0;
+    document.getElementById('rel-media-reacoes').textContent  = d.media_reacoes ?? '0';
     const taxa = d.total_posts > 0 ? (d.total_reacoes / d.total_posts).toFixed(1) : '0';
     document.getElementById('rel-taxa-eng').textContent = taxa;
+
+    // membros
+    if (d.total_membros_atual != null) {
+      document.getElementById('rel-membros-atual').textContent = d.total_membros_atual.toLocaleString('pt-BR');
+      const hist = d.membros_historico || [];
+      if (hist.length >= 2) {
+        const diff = hist[hist.length-1].total - hist[hist.length-2].total;
+        document.getElementById('rel-membros-sub').textContent =
+          (diff >= 0 ? '▲ +' : '▼ ') + diff + ' desde última captura';
+        document.getElementById('rel-membros-sub').style.color = diff >= 0 ? '#34d399' : '#f87171';
+      } else {
+        document.getElementById('rel-membros-sub').textContent = 'Primeira captura';
+      }
+    } else {
+      document.getElementById('rel-membros-atual').textContent = '—';
+      document.getElementById('rel-membros-sub').textContent = 'Clique em Atualizar';
+    }
+
+    // melhor hora
+    if (d.melhor_hora != null) {
+      document.getElementById('rel-melhor-hora').textContent = d.melhor_hora + 'h';
+    }
+
+    // virais
+    const virais = (d.top_posts || []).filter(p => p.viral).length;
+    document.getElementById('rel-virais').textContent = virais;
+
+    const fmt = s => s.slice(5); // "MM-DD"
+
+    // ── Gráfico: Crescimento de membros ──
+    const hist = d.membros_historico || [];
+    criarOuAtualizar('chart-membros', {
+      type: 'line',
+      data: {
+        labels: hist.map(h => fmt(h.data)),
+        datasets: [{ data: hist.map(h => h.total), borderColor: '#38bdf8', backgroundColor: '#38bdf820',
+          fill: true, tension: 0.4, pointRadius: hist.length < 30 ? 4 : 0 }]
+      },
+      options: { ...chartDefaults },
+    });
 
     const diasPosts   = Object.keys(d.posts_por_dia || {});
     const diasReacoes = Object.keys(d.reacoes_por_dia || {});
     const diasSaidas  = Object.keys(d.saidas_por_dia || {});
 
-    const fmt = dia => dia.slice(5); // "MM-DD"
-
-    // Gráfico: Posts por dia
+    // ── Gráfico: Posts por dia ──
     criarOuAtualizar('chart-posts-dia', {
       type: 'bar',
       data: {
         labels: diasPosts.map(fmt),
         datasets: [{ data: Object.values(d.posts_por_dia || {}), backgroundColor: '#4f6ef7aa', borderColor: '#4f6ef7', borderWidth: 1, borderRadius: 4 }]
       },
-      options: { ...chartDefaults, plugins: { legend: { display: false } } },
+      options: { ...chartDefaults },
     });
 
-    // Gráfico: Reações por dia
+    // ── Gráfico: Reações por dia ──
     criarOuAtualizar('chart-reacoes-dia', {
       type: 'line',
       data: {
@@ -1698,7 +1813,7 @@ async function carregarRelatorios() {
       options: { ...chartDefaults },
     });
 
-    // Gráfico: Saídas por dia
+    // ── Gráfico: Saídas por dia ──
     criarOuAtualizar('chart-saidas-dia', {
       type: 'bar',
       data: {
@@ -1708,31 +1823,78 @@ async function carregarRelatorios() {
       options: { ...chartDefaults },
     });
 
-    // Gráfico: Top posts (horizontal bar)
-    const topPosts = (d.top_posts || []).filter(p => p.reacoes > 0);
-    criarOuAtualizar('chart-top-posts', {
+    // ── Gráfico: Reações por hora ──
+    const horaKeys = Object.keys(d.reacoes_por_hora || {}).map(Number).sort((a,b)=>a-b);
+    criarOuAtualizar('chart-hora', {
       type: 'bar',
       data: {
-        labels: topPosts.map(p => p.texto.substring(0, 30) + (p.texto.length > 30 ? '…' : '')),
-        datasets: [{ data: topPosts.map(p => p.reacoes), backgroundColor: '#f59e0baa', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 4 }]
+        labels: horaKeys.map(h => h + 'h'),
+        datasets: [{
+          data: horaKeys.map(h => d.reacoes_por_hora[h]),
+          backgroundColor: horaKeys.map(h => h === d.melhor_hora ? '#f59e0b' : '#f59e0b44'),
+          borderColor: '#f59e0b', borderWidth: 1, borderRadius: 4
+        }]
       },
-      options: {
-        ...chartDefaults,
-        indexAxis: 'y',
-        scales: {
-          x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1e223560' }, beginAtZero: true },
-          y: { ticks: { color: '#c9d1e0', font: { size: 10 } }, grid: { display: false } },
-        },
-      },
+      options: { ...chartDefaults },
     });
 
-    if (!diasPosts.length && !diasSaidas.length) {
-      document.getElementById('rel-empty').style.display = '';
+    // ── Lista top posts ──
+    const topPosts = (d.top_posts || []).filter(p => p.reacoes > 0);
+    const lista = document.getElementById('rel-top-lista');
+    if (!topPosts.length) {
+      lista.innerHTML = '<div class="empty" style="padding:16px 0;"><p>Nenhum post com reações ainda</p></div>';
     } else {
-      document.getElementById('rel-empty').style.display = 'none';
+      lista.innerHTML = topPosts.map((p, i) => `
+        <div onclick="abrirModalPost(${i})" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:8px;cursor:pointer;transition:.15s;" onmouseenter="this.style.background='#1e2235'" onmouseleave="this.style.background='transparent'">
+          <div style="min-width:24px;height:24px;border-radius:50%;background:${i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#cd7c2f':'#1e2235'};display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:${i<3?'#0d1117':'#6b7280'};">${i+1}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="color:#d1d5db;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.texto}</div>
+            <div style="color:#4b5563;font-size:.72rem;margin-top:2px;">${p.data ? new Date(p.data).toLocaleDateString('pt-BR') : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${p.viral ? '<span style="font-size:.7rem;background:#ef444420;color:#f87171;padding:2px 7px;border-radius:4px;border:1px solid #ef444440;">🔥 viral</span>' : ''}
+            <span style="font-size:.9rem;font-weight:700;color:#a855f7;">${p.reacoes}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/></svg>
+          </div>
+        </div>`).join('');
     }
+
+    document.getElementById('rel-empty').style.display =
+      (!diasPosts.length && !diasSaidas.length && !hist.length) ? '' : 'none';
+
   } catch(e) {
     toast('Erro ao carregar relatórios', 'error');
+  }
+}
+
+function abrirModalPost(i) {
+  const p = (_analyticsData?.top_posts || [])[i];
+  if (!p) return;
+  document.getElementById('modal-texto').textContent   = p.texto;
+  document.getElementById('modal-data').textContent    = p.data ? new Date(p.data).toLocaleString('pt-BR') : '—';
+  document.getElementById('modal-reacoes').textContent = p.reacoes;
+  const media = _analyticsData?.media_reacoes || 0;
+  const pct   = media > 0 ? ((p.reacoes / media) * 100).toFixed(0) + '%' : '—';
+  document.getElementById('modal-vs-media').textContent = pct;
+  document.getElementById('modal-viral-icon').textContent = p.viral ? '🔥' : '📄';
+  document.getElementById('modal-viral-txt').textContent  = p.viral ? 'Viral' : 'Normal';
+  const overlay = document.getElementById('post-modal-overlay');
+  overlay.style.display = 'flex';
+}
+
+function fecharModalPost() {
+  document.getElementById('post-modal-overlay').style.display = 'none';
+}
+
+async function capturarMembrosAgora() {
+  try {
+    const r = await authFetch('/analytics/capturar-membros', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Erro', 'error'); return; }
+    toast(`${d.total_membros.toLocaleString('pt-BR')} membros capturados!`, 'success');
+    carregarRelatorios();
+  } catch(e) {
+    toast('Erro de conexão', 'error');
   }
 }
 

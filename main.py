@@ -82,8 +82,9 @@ def get_openai_client(user_id: str = ""):
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    scheduler.add_job(verificar_e_enviar_posts, "interval", minutes=1, id="check_posts")
-    scheduler.add_job(job_piloto_automatico, "interval", minutes=15, id="piloto_auto")
+    scheduler.add_job(verificar_e_enviar_posts,  "interval", minutes=1,  id="check_posts")
+    scheduler.add_job(job_piloto_automatico,     "interval", minutes=15, id="piloto_auto")
+    scheduler.add_job(job_capturar_membros,      "interval", hours=1,    id="capturar_membros")
     scheduler.start()
     print("[SCHEDULER] Iniciado — verificando posts a cada minuto")
     yield
@@ -582,6 +583,63 @@ Retorne APENAS o JSON válido, sem markdown, sem explicações."""
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Captura de membros ────────────────────────────────────────────
+async def job_capturar_membros():
+    """Roda a cada hora: salva snapshot do total de membros de cada canal."""
+    try:
+        rows = db.table("configuracoes").select("user_id,valor").eq("chave", "TELEGRAM_CHAT_ID").execute()
+        for r in (rows.data or []):
+            uid     = r.get("user_id")
+            chat_id = r.get("valor")
+            if not uid or not chat_id:
+                continue
+            try:
+                token = get_bot_token(uid)
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        f"https://api.telegram.org/bot{token}/getChatMemberCount",
+                        params={"chat_id": chat_id}
+                    )
+                data = resp.json()
+                if data.get("ok"):
+                    total = data["result"]
+                    db.table("canal_membros").insert({
+                        "user_id": uid,
+                        "total_membros": total,
+                        "capturado_em": datetime.utcnow().isoformat(),
+                    }).execute()
+                    print(f"[MEMBROS ✓] user {uid}: {total} membros")
+            except Exception as e:
+                print(f"[MEMBROS ERRO] user {uid}: {e}")
+    except Exception as e:
+        print(f"[MEMBROS JOB ERRO] {e}")
+
+
+@app.post("/analytics/capturar-membros")
+async def capturar_membros_agora(request: Request):
+    """Captura imediata do total de membros para o usuário autenticado."""
+    uid     = require_user(request)
+    chat_id = get_chat_id(uid)
+    token   = get_bot_token(uid)
+    if not chat_id or not token:
+        raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"https://api.telegram.org/bot{token}/getChatMemberCount",
+            params={"chat_id": chat_id}
+        )
+    data = resp.json()
+    if not data.get("ok"):
+        raise HTTPException(status_code=400, detail=data.get("description", "Erro Telegram"))
+    total = data["result"]
+    db.table("canal_membros").insert({
+        "user_id": uid,
+        "total_membros": total,
+        "capturado_em": datetime.utcnow().isoformat(),
+    }).execute()
+    return {"total_membros": total}
+
+
 # ── Relatórios / Analytics ────────────────────────────────────────
 @app.get("/analytics")
 async def get_analytics(request: Request):
@@ -597,24 +655,83 @@ async def get_analytics(request: Request):
                 saidas_por_dia[dia] += 1
 
         canal_posts = db.table("canal_posts").select("*").eq("user_id", uid).order("data", desc=False).limit(1000).execute().data or []
-        posts_por_dia = defaultdict(int)
+        posts_por_dia   = defaultdict(int)
         reacoes_por_dia = defaultdict(int)
+        reacoes_por_hora = defaultdict(lambda: {"reacoes": 0, "posts": 0})
+
         for p in canal_posts:
-            dia = (p.get("data") or "")[:10]
+            data_str = p.get("data") or ""
+            dia = data_str[:10]
             if dia:
                 posts_por_dia[dia] += 1
                 reacoes_por_dia[dia] += p.get("reacoes") or 0
+            # hora do dia (ex: "2024-03-10T14:23:00" → hora 14)
+            if len(data_str) >= 13:
+                try:
+                    hora = int(data_str[11:13])
+                    reacoes_por_hora[hora]["reacoes"] += p.get("reacoes") or 0
+                    reacoes_por_hora[hora]["posts"]   += 1
+                except Exception:
+                    pass
+
+        total_reacoes = sum(p.get("reacoes") or 0 for p in canal_posts)
+        media_reacoes = total_reacoes / len(canal_posts) if canal_posts else 0
+        limiar_viral  = max(media_reacoes * 2, 1)
 
         top_posts = sorted(canal_posts, key=lambda x: x.get("reacoes") or 0, reverse=True)[:10]
+        top_posts_rich = [
+            {
+                "id":     p.get("id"),
+                "texto":  (p.get("texto") or "")[:120],
+                "reacoes": p.get("reacoes") or 0,
+                "data":   p.get("data") or "",
+                "viral":  (p.get("reacoes") or 0) >= limiar_viral,
+            }
+            for p in top_posts
+        ]
+
+        # Melhor hora para postar: hora com maior média de reações
+        melhor_hora = None
+        melhor_media = -1
+        for hora, v in reacoes_por_hora.items():
+            if v["posts"] > 0:
+                media_h = v["reacoes"] / v["posts"]
+                if media_h > melhor_media:
+                    melhor_media = media_h
+                    melhor_hora  = hora
+
+        # Histórico de membros
+        membros_rows = (db.table("canal_membros")
+                        .select("capturado_em,total_membros")
+                        .eq("user_id", uid)
+                        .order("capturado_em", desc=False)
+                        .limit(200)
+                        .execute().data or [])
+        membros_historico = [
+            {"data": r["capturado_em"][:10], "total": r["total_membros"]}
+            for r in membros_rows
+        ]
+        total_membros_atual = membros_rows[-1]["total_membros"] if membros_rows else None
+
+        # reacoes_por_hora como dict serializável {hora: media}
+        reacoes_hora_serializado = {
+            str(h): round(v["reacoes"] / v["posts"], 2) if v["posts"] else 0
+            for h, v in sorted(reacoes_por_hora.items())
+        }
 
         return {
-            "saidas_por_dia":   dict(sorted(saidas_por_dia.items())),
-            "posts_por_dia":    dict(sorted(posts_por_dia.items())),
-            "reacoes_por_dia":  dict(sorted(reacoes_por_dia.items())),
-            "top_posts":        [{"texto": (p.get("texto") or "")[:60], "reacoes": p.get("reacoes") or 0} for p in top_posts],
-            "total_saidas":     len(saidas),
-            "total_posts":      len(canal_posts),
-            "total_reacoes":    sum(p.get("reacoes") or 0 for p in canal_posts),
+            "saidas_por_dia":       dict(sorted(saidas_por_dia.items())),
+            "posts_por_dia":        dict(sorted(posts_por_dia.items())),
+            "reacoes_por_dia":      dict(sorted(reacoes_por_dia.items())),
+            "reacoes_por_hora":     reacoes_hora_serializado,
+            "top_posts":            top_posts_rich,
+            "membros_historico":    membros_historico,
+            "total_membros_atual":  total_membros_atual,
+            "total_saidas":         len(saidas),
+            "total_posts":          len(canal_posts),
+            "total_reacoes":        total_reacoes,
+            "media_reacoes":        round(media_reacoes, 2),
+            "melhor_hora":          melhor_hora,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
