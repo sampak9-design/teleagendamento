@@ -206,6 +206,14 @@
     </div>
   </div>
 
+  <div class="nav-section">
+    <div class="nav-label">Sistema</div>
+    <div class="nav-item" onclick="navegar('configuracoes', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configurações
+    </div>
+  </div>
+
   <div class="sidebar-bottom">
     <div class="bot-status">
       <div class="bot-dot" id="bot-dot"></div>
@@ -590,6 +598,75 @@
       </div>
     </div>
 
+    <!-- ═══════════════ CONFIGURAÇÕES ═══════════════ -->
+    <div class="section" id="section-configuracoes">
+      <div style="max-width:680px;">
+
+        <!-- Telegram -->
+        <div class="panel" style="margin-bottom:16px;">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Telegram
+          </div>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Bot Token</label>
+              <input id="cfg-bot-token" type="password" placeholder="8246646726:AAEaDj97...">
+              <span style="font-size:0.7rem;color:#4a5568;" id="cfg-bot-token-status"></span>
+            </div>
+            <div class="form-group full">
+              <label>Chat ID do Canal</label>
+              <input id="cfg-chat-id" type="text" placeholder="-1003517673846 ou @meucanal">
+              <span style="font-size:0.7rem;color:#4a5568;" id="cfg-chat-id-status"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claude (Anthropic) -->
+        <div class="panel" style="margin-bottom:16px;">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Claude — IA de Texto (Anthropic)
+          </div>
+          <div class="form-group">
+            <label>Anthropic API Key</label>
+            <input id="cfg-anthropic-key" type="password" placeholder="sk-ant-api03-...">
+            <span style="font-size:0.7rem;color:#4a5568;" id="cfg-anthropic-status"></span>
+          </div>
+          <div style="margin-top:10px;font-size:0.75rem;color:#4a5568;">
+            Usada para: gerar posts com IA e analisar o canal. Obtenha em <span style="color:#4f6ef7;">console.anthropic.com</span>
+          </div>
+        </div>
+
+        <!-- OpenAI -->
+        <div class="panel" style="margin-bottom:24px;">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            DALL-E — IA de Imagens (OpenAI)
+          </div>
+          <div class="form-group">
+            <label>OpenAI API Key</label>
+            <input id="cfg-openai-key" type="password" placeholder="sk-...">
+            <span style="font-size:0.7rem;color:#4a5568;" id="cfg-openai-status"></span>
+          </div>
+          <div style="margin-top:10px;font-size:0.75rem;color:#4a5568;">
+            Usada para: gerar imagens com DALL-E 2 / DALL-E 3. Obtenha em <span style="color:#4f6ef7;">platform.openai.com/api-keys</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-primary" onclick="salvarConfiguracoes()" id="btn-salvar-cfg">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Salvar Configurações
+          </button>
+          <button class="btn btn-ghost" onclick="registrarWebhook()">
+            🔗 Registrar Webhook Telegram
+          </button>
+        </div>
+        <div id="cfg-msg" style="margin-top:12px;font-size:0.8rem;"></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -613,11 +690,13 @@ function navegar(id, el) {
     'agendados': 'Posts Agendados',
     'ia-criativa': 'IA Criativa',
     'analise': 'Análise do Canal',
+    'configuracoes': 'Configurações',
   };
   document.getElementById('topbar-title').textContent = titulos[id] || id;
 
   if (id === 'agendados') carregarPosts();
   if (id === 'dashboard') carregarStats();
+  if (id === 'configuracoes') carregarConfiguracoes();
 }
 
 // ── Toast ──────────────────────────────────────────────────────────
@@ -1082,6 +1161,95 @@ async function rodarAnalise() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Analisar Canal com IA';
+  }
+}
+
+// ── Configurações ─────────────────────────────────────────────────
+async function carregarConfiguracoes() {
+  try {
+    const r = await fetch('/configuracoes');
+    const d = await r.json();
+    const map = {
+      'TELEGRAM_BOT_TOKEN': 'cfg-bot-token',
+      'TELEGRAM_CHAT_ID': 'cfg-chat-id',
+      'ANTHROPIC_API_KEY': 'cfg-anthropic-key',
+      'OPENAI_API_KEY': 'cfg-openai-key',
+    };
+    const statusMap = {
+      'TELEGRAM_BOT_TOKEN': 'cfg-bot-token-status',
+      'TELEGRAM_CHAT_ID': 'cfg-chat-id-status',
+      'ANTHROPIC_API_KEY': 'cfg-anthropic-status',
+      'OPENAI_API_KEY': 'cfg-openai-status',
+    };
+    for (const [chave, info] of Object.entries(d)) {
+      const inputId = map[chave];
+      const statusId = statusMap[chave];
+      if (inputId) {
+        document.getElementById(inputId).placeholder = info.configurado ? info.valor_display : document.getElementById(inputId).placeholder;
+      }
+      if (statusId) {
+        const el = document.getElementById(statusId);
+        el.textContent = info.configurado ? '✓ Configurado' : '⚠ Não configurado';
+        el.style.color = info.configurado ? '#22c55e' : '#f59e0b';
+      }
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function salvarConfiguracoes() {
+  const btn = document.getElementById('btn-salvar-cfg');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Salvando...';
+
+  const payload = {};
+  const campos = {
+    'cfg-bot-token': 'TELEGRAM_BOT_TOKEN',
+    'cfg-chat-id': 'TELEGRAM_CHAT_ID',
+    'cfg-anthropic-key': 'ANTHROPIC_API_KEY',
+    'cfg-openai-key': 'OPENAI_API_KEY',
+  };
+  for (const [id, chave] of Object.entries(campos)) {
+    const val = document.getElementById(id).value.trim();
+    if (val) payload[chave] = val;
+  }
+
+  try {
+    const r = await fetch('/configuracoes', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      toast('Configurações salvas!', 'success');
+      // Limpa os campos e recarrega status
+      Object.keys(campos).forEach(id => document.getElementById(id).value = '');
+      carregarConfiguracoes();
+      // Atualiza chat_id no formulário de novo post
+      fetch('/config').then(r=>r.json()).then(d=>{
+        if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
+      });
+    } else {
+      toast('Erro ao salvar', 'error');
+    }
+  } catch(e) {
+    toast('Erro de conexão', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Salvar Configurações';
+  }
+}
+
+async function registrarWebhook() {
+  try {
+    const r = await fetch('/telegram/setup');
+    const d = await r.json();
+    if (d.result === true || d.ok) {
+      toast('Webhook registrado!', 'success');
+    } else {
+      toast('Erro: ' + JSON.stringify(d.description || d), 'error');
+    }
+  } catch(e) {
+    toast('Erro de conexão', 'error');
   }
 }
 

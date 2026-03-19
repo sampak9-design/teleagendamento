@@ -28,6 +28,31 @@ ai        = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 oai       = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 scheduler = AsyncIOScheduler()
 
+# ── Config helpers ─────────────────────────────────────────────────
+def get_cfg(chave: str, default: str = "") -> str:
+    """Busca config do banco; fallback para variável de ambiente."""
+    try:
+        r = db.table("configuracoes").select("valor").eq("chave", chave).execute()
+        if r.data and r.data[0].get("valor"):
+            return r.data[0]["valor"]
+    except Exception:
+        pass
+    return default
+
+def get_bot_token() -> str:
+    return get_cfg("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN)
+
+def get_chat_id() -> str:
+    return get_cfg("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)
+
+def get_anthropic_client():
+    key = get_cfg("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)
+    return anthropic.Anthropic(api_key=key)
+
+def get_openai_client():
+    key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY)
+    return openai.OpenAI(api_key=key) if key else None
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler.add_job(verificar_e_enviar_posts, "interval", minutes=1, id="check_posts")
@@ -55,7 +80,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ── Telegram ──────────────────────────────────────────────────────
 async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text", arquivo_url: str = None):
-    base = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+    base = f"https://api.telegram.org/bot{get_bot_token()}"
     async with httpx.AsyncClient() as client:
         if tipo == "photo" and arquivo_url:
             resp = await client.post(f"{base}/sendPhoto",
@@ -88,7 +113,7 @@ async def verificar_e_enviar_posts():
 
         for post in posts:
             try:
-                chat_id = post.get("chat_id") or TELEGRAM_CHAT_ID
+                chat_id = post.get("chat_id") or get_chat_id()
                 res = await enviar_telegram(
                     chat_id=chat_id,
                     texto=post.get("texto", ""),
@@ -141,7 +166,44 @@ async def verificar_e_enviar_posts():
 # ── Config ────────────────────────────────────────────────────────
 @app.get("/config")
 def get_config():
-    return {"chat_id": TELEGRAM_CHAT_ID}
+    return {"chat_id": get_chat_id()}
+
+
+@app.get("/configuracoes")
+def listar_configuracoes():
+    chaves = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+    resultado = {}
+    for chave in chaves:
+        val = get_cfg(chave, "")
+        if not val:
+            # fallback para env, mascarado
+            env_map = {
+                "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN,
+                "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
+                "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
+                "OPENAI_API_KEY": OPENAI_API_KEY,
+            }
+            val = env_map.get(chave, "")
+        # Mascara chaves longas
+        if len(val) > 12 and chave != "TELEGRAM_CHAT_ID":
+            val_display = val[:6] + "..." + val[-4:]
+        else:
+            val_display = val
+        resultado[chave] = {"valor_display": val_display, "configurado": bool(val)}
+    return resultado
+
+
+@app.post("/configuracoes")
+async def salvar_configuracoes(request: Request):
+    data = await request.json()
+    chaves_permitidas = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+    for chave, valor in data.items():
+        if chave not in chaves_permitidas:
+            continue
+        if not valor or not valor.strip():
+            continue
+        db.table("configuracoes").upsert({"chave": chave, "valor": valor.strip(), "updated_at": datetime.utcnow().isoformat()}).execute()
+    return {"status": "ok"}
 
 
 # ── Webhook: captura posts, reações e saídas ──────────────────────
@@ -214,7 +276,7 @@ async def telegram_setup(request: Request):
     webhook_url = str(request.base_url).rstrip("/").replace("http://", "https://") + "/telegram/webhook"
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook",
+            f"https://api.telegram.org/bot{get_bot_token()}/setWebhook",
             json={"url": webhook_url, "allowed_updates": ["channel_post", "message_reaction", "chat_member"]},
         )
     result = resp.json()
@@ -337,7 +399,8 @@ Regras:
 Retorne APENAS o texto do post, sem explicações adicionais."""
 
     try:
-        msg = ai.messages.create(
+        cliente = get_anthropic_client()
+        msg = cliente.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}]
@@ -359,7 +422,8 @@ async def ia_gerar_imagem(request: Request):
 
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt é obrigatório")
-    if not oai:
+    cliente_oai = get_openai_client()
+    if not cliente_oai:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
     try:
@@ -367,7 +431,7 @@ async def ia_gerar_imagem(request: Request):
         if model == "dall-e-3":
             kwargs["quality"] = quality
             kwargs["style"] = style
-        resp = oai.images.generate(**kwargs)
+        resp = cliente_oai.images.generate(**kwargs)
         return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -453,7 +517,8 @@ Histórico recente de posts:
 
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
-        msg = ai.messages.create(
+        cliente = get_anthropic_client()
+        msg = cliente.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1000,
             messages=[{"role": "user", "content": prompt}]
