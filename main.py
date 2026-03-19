@@ -168,24 +168,43 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.post("/upload/video-note")
-async def upload_video_note(request: Request, file: UploadFile = File(...)):
-    """Faz upload de um video note: envia ao Telegram, extrai file_id, apaga a mensagem."""
-    uid     = require_user(request)
+async def upload_video_note(
+    request: Request,
+    file: UploadFile = File(...),
+    jwt: str = Form(default=""),
+):
+    """Upload de video note — token passado como form field para compatibilidade multipart."""
+    # Extrai uid do JWT enviado como form field
+    uid = ""
+    if jwt:
+        try:
+            payload = jwt.split(".")[1]
+            payload += "=" * (4 - len(payload) % 4)
+            uid = json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
+        except Exception:
+            pass
+    if not uid:
+        uid = get_user_id(request)  # fallback para header
+    if not uid:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+
     token   = get_bot_token(uid)
     chat_id = get_chat_id(uid)
     if not token or not chat_id:
         raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
 
     conteudo = await file.read()
-    async with httpx.AsyncClient(timeout=60) as client:
+    fname    = file.filename or "video.mp4"
+
+    async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
             f"https://api.telegram.org/bot{token}/sendVideoNote",
             data={"chat_id": chat_id},
-            files={"video_note": (file.filename, conteudo, file.content_type or "video/mp4")},
+            files={"video_note": (fname, conteudo, "video/mp4")},
         )
     data = resp.json()
     if not data.get("ok"):
-        raise HTTPException(status_code=400, detail=data.get("description", "Erro ao enviar vídeo"))
+        raise HTTPException(status_code=400, detail=f"Telegram: {data.get('description', 'Erro desconhecido')}")
 
     msg        = data["result"]
     file_id    = msg["video_note"]["file_id"]
@@ -201,7 +220,7 @@ async def upload_video_note(request: Request, file: UploadFile = File(...)):
     except Exception:
         pass
 
-    return {"file_id": file_id, "filename": file.filename}
+    return {"file_id": file_id}
 
 
 # ── Telegram ──────────────────────────────────────────────────────

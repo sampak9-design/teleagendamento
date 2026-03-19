@@ -1389,14 +1389,11 @@ async function criarPost() {
     const status = document.getElementById('np-video-note-status');
     status.textContent = '⏳ Enviando vídeo para o Telegram...';
     try {
+      const s = await supa.auth.getSession();
       const fd = new FormData();
       fd.append('file', fileInput.files[0]);
-      const s = await supa.auth.getSession();
-      const upResp = await fetch('/upload/video-note', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + s.data.session.access_token },
-        body: fd
-      });
+      fd.append('jwt', s.data.session.access_token);
+      const upResp = await fetch('/upload/video-note', { method: 'POST', body: fd });
       const upData = await upResp.json();
       if (!upResp.ok) { toast('Erro no upload: ' + (upData.detail || 'falha'), 'error'); btn.disabled=false; btn.innerHTML='Agendar Post'; return; }
       fileId = upData.file_id;
