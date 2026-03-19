@@ -350,6 +350,38 @@ async def telegram_setup(request: Request):
     return result
 
 
+@app.get("/debug/reacoes")
+async def debug_reacoes(request: Request):
+    uid = require_user(request)
+    # Info do webhook no Telegram
+    token = get_bot_token(uid)
+    webhook_info = {}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"https://api.telegram.org/bot{token}/getWebhookInfo")
+            webhook_info = r.json().get("result", {})
+    except Exception as e:
+        webhook_info = {"erro": str(e)}
+
+    # Últimos posts com reações no banco
+    posts = db.table("canal_posts").select("message_id,texto,reacoes,data").eq("user_id", uid).order("reacoes", desc=True).limit(10).execute().data or []
+
+    return {
+        "webhook": {
+            "url":              webhook_info.get("url", ""),
+            "allowed_updates":  webhook_info.get("allowed_updates", []),
+            "pending_updates":  webhook_info.get("pending_update_count", 0),
+            "last_error":       webhook_info.get("last_error_message", ""),
+            "last_error_date":  webhook_info.get("last_error_date", 0),
+        },
+        "posts_com_reacoes": [
+            {"message_id": p.get("message_id"), "reacoes": p.get("reacoes"), "texto": (p.get("texto") or "")[:60]}
+            for p in posts
+        ],
+        "total_posts_banco": len(db.table("canal_posts").select("id").eq("user_id", uid).execute().data or []),
+    }
+
+
 # ── Canal posts ───────────────────────────────────────────────────
 @app.get("/canal/posts")
 async def listar_canal_posts(request: Request):
