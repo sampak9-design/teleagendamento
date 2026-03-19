@@ -379,7 +379,18 @@
 
     <!-- ═══════════════ IA CRIATIVA ═══════════════ -->
     <div class="section" id="section-ia-criativa">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;">
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #1e2235;padding-bottom:0;">
+        <button class="ia-tab ativo" onclick="trocarAbaIA(this,'ia-texto')" style="padding:8px 18px;background:none;border:none;border-bottom:2px solid #4f6ef7;color:#e2e8f0;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:-1px;">
+          ✍️ Texto
+        </button>
+        <button class="ia-tab" onclick="trocarAbaIA(this,'ia-imagem')" style="padding:8px 18px;background:none;border:none;border-bottom:2px solid transparent;color:#6b7280;font-size:0.82rem;font-weight:500;cursor:pointer;font-family:inherit;margin-bottom:-1px;">
+          🎨 Arte / Imagem
+        </button>
+      </div>
+
+      <!-- Aba Texto -->
+      <div id="ia-texto" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;">
         <div class="panel">
           <div class="panel-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
@@ -420,6 +431,76 @@
             </button>
           </div>
           <div class="ia-output loading" id="ia-resultado">O post gerado pela IA aparecerá aqui...</div>
+        </div>
+      </div>
+
+      <!-- Aba Imagem -->
+      <div id="ia-imagem" style="display:none;max-width:900px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <!-- Configurações -->
+          <div class="panel">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Gerar Arte com IA
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+              <label>Descrição da Arte</label>
+              <textarea id="img-prompt" placeholder="Ex: arte minimalista de marketing digital, cores azul e roxo, estilo profissional, fundo escuro..." style="min-height:80px;"></textarea>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+              <label>Estilo</label>
+              <div class="tons-grid" id="estilos-grid">
+                <button class="ton-btn ativo" onclick="selecionarEstilo(this,'flux')">Padrão</button>
+                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-realism')">Realista</button>
+                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-anime')">Anime</button>
+                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-3d')">3D</button>
+                <button class="ton-btn" onclick="selecionarEstilo(this,'any-dark')">Dark Art</button>
+                <button class="ton-btn" onclick="selecionarEstilo(this,'turbo')">Turbo</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>Proporção</label>
+              <div class="tons-grid" id="proporcao-grid">
+                <button class="ton-btn ativo" onclick="selecionarProporcao(this,'1080','1080')">Quadrado 1:1</button>
+                <button class="ton-btn" onclick="selecionarProporcao(this,'1280','720')">Paisagem 16:9</button>
+                <button class="ton-btn" onclick="selecionarProporcao(this,'720','1280')">Retrato 9:16</button>
+                <button class="ton-btn" onclick="selecionarProporcao(this,'1200','628')">Banner</button>
+              </div>
+            </div>
+
+            <button class="btn btn-purple" onclick="gerarImagem()" id="btn-gerar-img" style="width:100%;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Gerar Imagem
+            </button>
+          </div>
+
+          <!-- Preview -->
+          <div class="panel">
+            <div class="panel-title" style="justify-content:space-between;">
+              <span>Preview da Arte</span>
+              <div style="display:flex;gap:8px;" id="img-acoes" style="display:none;">
+                <a id="btn-baixar" class="btn btn-ghost" style="padding:4px 10px;text-decoration:none;display:none;" download="arte.jpg">
+                  ⬇ Baixar
+                </a>
+                <button class="btn btn-green" id="btn-usar-img" onclick="usarImagemGerada()" style="padding:4px 10px;display:none;">
+                  Agendar →
+                </button>
+              </div>
+            </div>
+            <div id="img-preview-container" style="display:flex;align-items:center;justify-content:center;min-height:280px;background:#0f1117;border-radius:8px;border:1px solid #1e2235;overflow:hidden;">
+              <div style="text-align:center;color:#4a5568;">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 10px;display:block;opacity:0.3;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p style="font-size:0.8rem;">A imagem gerada aparecerá aqui</p>
+              </div>
+            </div>
+            <div id="img-url-display" style="display:none;margin-top:10px;">
+              <label style="font-size:0.72rem;color:#6b7280;">URL da imagem</label>
+              <input id="img-url-val" type="text" readonly style="font-size:0.72rem;color:#4a5568;cursor:text;" onclick="this.select()">
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -727,6 +808,101 @@ async function criarPost() {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Agendar Post';
   }
+}
+
+// ── Tabs IA Criativa ───────────────────────────────────────────────
+function trocarAbaIA(el, abaId) {
+  document.querySelectorAll('.ia-tab').forEach(t => {
+    t.style.borderBottomColor = 'transparent';
+    t.style.color = '#6b7280';
+  });
+  el.style.borderBottomColor = '#4f6ef7';
+  el.style.color = '#e2e8f0';
+  document.getElementById('ia-texto').style.display = abaId === 'ia-texto' ? 'grid' : 'none';
+  document.getElementById('ia-imagem').style.display = abaId === 'ia-imagem' ? 'block' : 'none';
+}
+
+// ── IA Imagem ──────────────────────────────────────────────────────
+let estiloSelecionado = 'flux';
+let imgWidth = '1080';
+let imgHeight = '1080';
+
+function selecionarEstilo(el, estilo) {
+  document.querySelectorAll('#estilos-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  estiloSelecionado = estilo;
+}
+
+function selecionarProporcao(el, w, h) {
+  document.querySelectorAll('#proporcao-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  imgWidth = w;
+  imgHeight = h;
+}
+
+async function gerarImagem() {
+  const prompt = document.getElementById('img-prompt').value.trim();
+  if (!prompt) { toast('Descreva a arte que deseja gerar', 'error'); return; }
+
+  const btn = document.getElementById('btn-gerar-img');
+  const container = document.getElementById('img-preview-container');
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Gerando...';
+
+  container.innerHTML = `<div style="text-align:center;color:#4a5568;">
+    <div class="spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 12px;"></div>
+    <p style="font-size:0.8rem;">Gerando sua arte...</p>
+  </div>`;
+
+  document.getElementById('img-url-display').style.display = 'none';
+  document.getElementById('btn-baixar').style.display = 'none';
+  document.getElementById('btn-usar-img').style.display = 'none';
+
+  const seed = Math.floor(Math.random() * 999999);
+  const encodedPrompt = encodeURIComponent(prompt);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${imgWidth}&height=${imgHeight}&model=${estiloSelecionado}&nologo=true&seed=${seed}`;
+
+  const img = new Image();
+  img.onload = () => {
+    container.innerHTML = '';
+    img.style.cssText = 'width:100%;height:auto;border-radius:6px;display:block;max-height:400px;object-fit:contain;';
+    container.appendChild(img);
+
+    document.getElementById('img-url-val').value = url;
+    document.getElementById('img-url-display').style.display = 'block';
+
+    const btnBaixar = document.getElementById('btn-baixar');
+    btnBaixar.href = url;
+    btnBaixar.style.display = '';
+
+    document.getElementById('btn-usar-img').style.display = '';
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Gerar Imagem';
+    toast('Arte gerada!', 'success');
+  };
+  img.onerror = () => {
+    container.innerHTML = '<div style="text-align:center;color:#ef4444;padding:40px;"><p style="font-size:0.8rem;">Erro ao gerar imagem. Tente novamente.</p></div>';
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Gerar Imagem';
+    toast('Erro ao gerar imagem', 'error');
+  };
+  img.src = url;
+}
+
+function usarImagemGerada() {
+  const url = document.getElementById('img-url-val').value;
+  if (!url) return;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
+  const navNovo = [...document.querySelectorAll('.nav-item')].find(el => el.textContent.trim().startsWith('Novo Post'));
+  if (navNovo) navegar('novo-post', navNovo);
+  setTimeout(() => {
+    document.getElementById('np-tipo').value = 'photo';
+    toggleArquivoUrl();
+    document.getElementById('np-arquivo-url').value = url;
+    toast('Imagem adicionada ao agendador!', 'success');
+  }, 100);
 }
 
 // ── IA Criativa ────────────────────────────────────────────────────
