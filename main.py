@@ -931,7 +931,7 @@ async def job_piloto_automatico():
         print(f"[PILOTO JOB ERRO] {e}")
 
 
-async def _gerar_post_automatico(uid: str):
+async def _gerar_post_automatico(uid: str, forcar: bool = False):
     posts_dia   = int(get_cfg("piloto_posts_dia",    "3",   uid))
     topico      = get_cfg("piloto_topico",           "",    uid)
     estilo      = get_cfg("piloto_estilo",   "engajador",   uid)
@@ -946,21 +946,23 @@ async def _gerar_post_automatico(uid: str):
     if not topico:
         return
 
-    # Checar horário (UTC)
     agora = datetime.utcnow()
-    hora_local = agora.hour  # assume UTC; Railway está em UTC
-    if not (h_inicio <= hora_local < h_fim):
-        return
 
-    # Checar intervalo mínimo entre posts
-    intervalo_horas = 24 / max(posts_dia, 1)
-    if ultimo:
-        try:
-            dt_ultimo = datetime.fromisoformat(ultimo.replace("Z", ""))
-            if (agora - dt_ultimo).total_seconds() < intervalo_horas * 3600:
-                return
-        except Exception:
-            pass
+    if not forcar:
+        # Checar horário (UTC)
+        hora_local = agora.hour
+        if not (h_inicio <= hora_local < h_fim):
+            return
+
+        # Checar intervalo mínimo entre posts
+        intervalo_horas = 24 / max(posts_dia, 1)
+        if ultimo:
+            try:
+                dt_ultimo = datetime.fromisoformat(ultimo.replace("Z", ""))
+                if (agora - dt_ultimo).total_seconds() < intervalo_horas * 3600:
+                    return
+            except Exception:
+                pass
 
     # Buscar dados do canal para contexto
     try:
@@ -1079,9 +1081,9 @@ async def piloto_gerar_agora(request: Request):
     uid = require_user(request)
     if get_cfg("piloto_topico", "", uid) == "":
         raise HTTPException(status_code=400, detail="Configure o tópico do canal primeiro")
-    # Forçar gerando ao limpar o último post
+    # Forçar: limpa último post e bypassa verificação de horário
     db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_ultimo_post", "valor": ""}).execute()
-    await _gerar_post_automatico(uid)
+    await _gerar_post_automatico(uid, forcar=True)
     return {"ok": True}
 
 
