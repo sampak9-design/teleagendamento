@@ -90,6 +90,14 @@
     .btn-primary { background: #4f6ef7; color: white; }
     .btn-primary:hover { background: #4060e8; }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #1e2235; color: #d1d5db; border: 1px solid #2d3347; }
+    .btn-secondary:hover { background: #252b3b; }
+    .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .toggle-wrap { cursor:pointer; }
+    .toggle-track { width:44px;height:24px;border-radius:12px;background:#374151;position:relative;transition:.3s; }
+    .toggle-track.on { background:#10b981; }
+    .toggle-thumb { width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:.3s; }
+    .toggle-track.on .toggle-thumb { left:23px; }
     .btn-ghost { background: transparent; color: #6b7280; border: 1px solid #1e2235; }
     .btn-ghost:hover { border-color: #4f6ef7; color: #4f6ef7; background: #1a1d2e; }
     .btn-danger { background: transparent; color: #ef4444; border: 1px solid #1e2235; }
@@ -280,6 +288,11 @@
     <div class="nav-item" onclick="navegar('relatorios', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Relatórios
+    </div>
+    <div class="nav-item" onclick="navegar('piloto', this)" id="nav-piloto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      Piloto Automático
+      <span class="nav-badge" id="badge-piloto" style="background:#10b981;display:none;">ON</span>
     </div>
   </div>
 
@@ -819,6 +832,133 @@
       </div>
     </div>
 
+    <!-- ── Piloto Automático ── -->
+    <div class="section" id="section-piloto">
+
+      <!-- Status card -->
+      <div class="panel" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div id="piloto-dot" style="width:12px;height:12px;border-radius:50%;background:#374151;box-shadow:none;transition:.3s;"></div>
+              <span style="font-size:1.1rem;font-weight:700;color:#f9fafb;" id="piloto-status-txt">Piloto Desligado</span>
+            </div>
+            <div style="color:#6b7280;font-size:.82rem;margin-top:4px;" id="piloto-ultimo-txt">Nenhum post gerado ainda</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-secondary" onclick="pilotoGerarAgora()" id="btn-gerar-agora">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Gerar Post Agora
+            </button>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <div class="toggle-wrap" onclick="pilotoToggle()">
+                <div class="toggle-track" id="toggle-track">
+                  <div class="toggle-thumb" id="toggle-thumb"></div>
+                </div>
+              </div>
+              <span style="color:#d1d5db;font-size:.9rem;" id="toggle-label">Desligado</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="panel">
+          <div class="panel-title" style="margin-bottom:14px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/></svg>
+            Configuração do Piloto
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tópico / Nicho do Canal</label>
+            <textarea id="piloto-topico" class="form-control" rows="3" placeholder="Ex: Notícias de tecnologia e IA, dicas de investimento, memes de programação..."></textarea>
+          </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label class="form-label">Estilo das Postagens</label>
+            <select id="piloto-estilo" class="form-control">
+              <option value="engajador">Engajador (perguntas, CTA)</option>
+              <option value="informativo">Informativo (educativo, fatos)</option>
+              <option value="casual">Casual (leve, divertido)</option>
+              <option value="formal">Formal (profissional)</option>
+              <option value="provocativo">Provocativo (polêmico, debate)</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+            <div class="form-group">
+              <label class="form-label">Posts por Dia</label>
+              <input type="number" id="piloto-posts-dia" class="form-control" min="1" max="24" value="3">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Gerar Imagem (DALL-E)</label>
+              <select id="piloto-imagem" class="form-control">
+                <option value="false">Não</option>
+                <option value="true">Sim</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+            <div class="form-group">
+              <label class="form-label">Horário Início (h)</label>
+              <input type="number" id="piloto-h-inicio" class="form-control" min="0" max="23" value="8">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Horário Fim (h)</label>
+              <input type="number" id="piloto-h-fim" class="form-control" min="1" max="24" value="22">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="pilotoSalvar()" id="btn-piloto-salvar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Salvar Configuração
+          </button>
+        </div>
+
+        <!-- Como funciona -->
+        <div class="panel" style="display:flex;flex-direction:column;gap:12px;">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Como Funciona
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <div style="min-width:28px;height:28px;border-radius:50%;background:#1e40af22;border:1px solid #3b82f6;display:flex;align-items:center;justify-content:center;color:#60a5fa;font-size:.75rem;font-weight:700;">1</div>
+              <div><div style="color:#f9fafb;font-size:.85rem;font-weight:600;">Configure o tópico</div><div style="color:#6b7280;font-size:.78rem;">Descreva do que é o seu canal</div></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <div style="min-width:28px;height:28px;border-radius:50%;background:#7c3aed22;border:1px solid #8b5cf6;display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:.75rem;font-weight:700;">2</div>
+              <div><div style="color:#f9fafb;font-size:.85rem;font-weight:600;">Ligue o piloto</div><div style="color:#6b7280;font-size:.78rem;">O Claude analisa seu canal e cria posts automaticamente</div></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <div style="min-width:28px;height:28px;border-radius:50%;background:#05966922;border:1px solid #10b981;display:flex;align-items:center;justify-content:center;color:#34d399;font-size:.75rem;font-weight:700;">3</div>
+              <div><div style="color:#f9fafb;font-size:.85rem;font-weight:600;">Posts enviados automaticamente</div><div style="color:#6b7280;font-size:.78rem;">A cada intervalo calculado pelo número de posts/dia, dentro do horário configurado</div></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <div style="min-width:28px;height:28px;border-radius:50%;background:#d9770622;border:1px solid #f59e0b;display:flex;align-items:center;justify-content:center;color:#fbbf24;font-size:.75rem;font-weight:700;">4</div>
+              <div><div style="color:#f9fafb;font-size:.85rem;font-weight:600;">Aprende com o canal</div><div style="color:#6b7280;font-size:.78rem;">Usa os posts mais engajados como referência de tom e estilo</div></div>
+            </div>
+          </div>
+          <div style="margin-top:auto;padding:10px;background:#1e2235;border-radius:8px;border-left:3px solid #f59e0b;">
+            <div style="color:#fbbf24;font-size:.78rem;font-weight:600;">⚠ Atenção</div>
+            <div style="color:#9ca3af;font-size:.75rem;margin-top:4px;">O piloto verifica a cada 15 minutos. Configure Bot Token e Chat ID em Configurações antes de ligar.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log de atividade -->
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Últimos Posts Gerados pelo Piloto
+        </div>
+        <div id="piloto-log-lista">
+          <div class="empty" style="padding:20px 0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px;"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            <p>Nenhum post gerado ainda</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -933,6 +1073,7 @@ function navegar(id, el) {
     'ia-criativa': 'IA Criativa',
     'analise': 'Análise do Canal',
     'relatorios': 'Relatórios',
+    'piloto': 'Piloto Automático',
     'configuracoes': 'Configurações',
   };
   document.getElementById('topbar-title').textContent = titulos[id] || id;
@@ -941,6 +1082,7 @@ function navegar(id, el) {
   if (id === 'agendados') carregarPosts();
   if (id === 'dashboard') carregarStats();
   if (id === 'configuracoes') carregarConfiguracoes();
+  if (id === 'piloto') carregarPiloto();
 }
 
 // ── Toast ──────────────────────────────────────────────────────────
@@ -1623,6 +1765,142 @@ async function checarBot() {
 authFetch('/config').then(r=>r.json()).then(d=>{
   if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
 });
+
+// ── Piloto Automático ──────────────────────────────────────────────
+let pilotoAtivo = false;
+
+async function carregarPiloto() {
+  try {
+    const r = await authFetch('/piloto');
+    const d = await r.json();
+    pilotoAtivo = d.piloto_ativo === 'true';
+    _atualizarUIPiloto(pilotoAtivo);
+
+    document.getElementById('piloto-topico').value    = d.piloto_topico    || '';
+    document.getElementById('piloto-estilo').value    = d.piloto_estilo    || 'engajador';
+    document.getElementById('piloto-posts-dia').value = d.piloto_posts_dia || '3';
+    document.getElementById('piloto-imagem').value    = d.piloto_imagem    || 'false';
+    document.getElementById('piloto-h-inicio').value  = d.piloto_h_inicio  || '8';
+    document.getElementById('piloto-h-fim').value     = d.piloto_h_fim     || '22';
+
+    if (d.piloto_ultimo_post) {
+      const dt = new Date(d.piloto_ultimo_post);
+      document.getElementById('piloto-ultimo-txt').textContent =
+        'Último post gerado: ' + dt.toLocaleString('pt-BR');
+    }
+
+    const log = Array.isArray(d.piloto_log) ? d.piloto_log : [];
+    _renderLog(log);
+  } catch(e) {
+    toast('Erro ao carregar piloto', 'error');
+  }
+}
+
+function _atualizarUIPiloto(ativo) {
+  const track  = document.getElementById('toggle-track');
+  const label  = document.getElementById('toggle-label');
+  const dot    = document.getElementById('piloto-dot');
+  const stxt   = document.getElementById('piloto-status-txt');
+  const badge  = document.getElementById('badge-piloto');
+
+  if (ativo) {
+    track.classList.add('on');
+    label.textContent = 'Ligado';
+    dot.style.background = '#10b981';
+    dot.style.boxShadow = '0 0 8px #10b981';
+    stxt.textContent = 'Piloto Ligado — postando automaticamente';
+    stxt.style.color = '#34d399';
+    badge.style.display = '';
+  } else {
+    track.classList.remove('on');
+    label.textContent = 'Desligado';
+    dot.style.background = '#374151';
+    dot.style.boxShadow = 'none';
+    stxt.textContent = 'Piloto Desligado';
+    stxt.style.color = '#f9fafb';
+    badge.style.display = 'none';
+  }
+}
+
+function _renderLog(log) {
+  const el = document.getElementById('piloto-log-lista');
+  if (!log.length) {
+    el.innerHTML = `<div class="empty" style="padding:20px 0;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px;"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      <p>Nenhum post gerado ainda</p></div>`;
+    return;
+  }
+  el.innerHTML = log.map(item => {
+    const dt = new Date(item.ts).toLocaleString('pt-BR');
+    const img = item.imagem ? '<span style="font-size:.7rem;background:#7c3aed33;color:#a78bfa;padding:2px 6px;border-radius:4px;margin-left:6px;">🖼 imagem</span>' : '';
+    return `<div style="padding:10px 0;border-bottom:1px solid #1e2235;display:flex;gap:10px;align-items:flex-start;">
+      <div style="min-width:8px;height:8px;border-radius:50%;background:#10b981;margin-top:5px;"></div>
+      <div style="flex:1;">
+        <div style="color:#d1d5db;font-size:.85rem;">${item.texto}...${img}</div>
+        <div style="color:#4b5563;font-size:.75rem;margin-top:3px;">${dt}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function pilotoToggle() {
+  pilotoAtivo = !pilotoAtivo;
+  _atualizarUIPiloto(pilotoAtivo);
+  try {
+    await authFetch('/piloto', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({piloto_ativo: pilotoAtivo ? 'true' : 'false'})
+    });
+    toast(pilotoAtivo ? '🟢 Piloto ligado!' : '⏹ Piloto desligado', pilotoAtivo ? 'success' : '');
+  } catch(e) {
+    toast('Erro ao salvar status', 'error');
+  }
+}
+
+async function pilotoSalvar() {
+  const btn = document.getElementById('btn-piloto-salvar');
+  btn.disabled = true;
+  try {
+    const body = {
+      piloto_topico:    document.getElementById('piloto-topico').value.trim(),
+      piloto_estilo:    document.getElementById('piloto-estilo').value,
+      piloto_posts_dia: document.getElementById('piloto-posts-dia').value,
+      piloto_imagem:    document.getElementById('piloto-imagem').value,
+      piloto_h_inicio:  document.getElementById('piloto-h-inicio').value,
+      piloto_h_fim:     document.getElementById('piloto-h-fim').value,
+    };
+    if (!body.piloto_topico) { toast('Informe o tópico do canal', 'error'); return; }
+    await authFetch('/piloto', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    toast('Configuração salva!', 'success');
+  } catch(e) {
+    toast('Erro ao salvar', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function pilotoGerarAgora() {
+  const btn = document.getElementById('btn-gerar-agora');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg> Gerando...';
+  try {
+    const r = await authFetch('/piloto/gerar-agora', {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Erro ao gerar', 'error'); return; }
+    toast('Post gerado e agendado!', 'success');
+    setTimeout(carregarPiloto, 1500);
+  } catch(e) {
+    toast('Erro de conexão', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Gerar Post Agora';
+  }
+}
 
 atualizarRelogio();
 setInterval(atualizarRelogio, 30000);

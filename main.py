@@ -83,6 +83,7 @@ def get_openai_client(user_id: str = ""):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler.add_job(verificar_e_enviar_posts, "interval", minutes=1, id="check_posts")
+    scheduler.add_job(job_piloto_automatico, "interval", minutes=15, id="piloto_auto")
     scheduler.start()
     print("[SCHEDULER] Iniciado — verificando posts a cada minuto")
     yield
@@ -617,6 +618,166 @@ async def get_analytics(request: Request):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Piloto Automático ─────────────────────────────────────────────
+
+async def job_piloto_automatico():
+    """Roda a cada 15 min: gera e agenda posts para usuários com piloto ativo."""
+    try:
+        rows = db.table("configuracoes").select("user_id").eq("chave", "piloto_ativo").eq("valor", "true").execute()
+        usuarios = [r["user_id"] for r in (rows.data or []) if r.get("user_id")]
+        for uid in usuarios:
+            try:
+                await _gerar_post_automatico(uid)
+            except Exception as e:
+                print(f"[PILOTO ERRO] user {uid}: {e}")
+    except Exception as e:
+        print(f"[PILOTO JOB ERRO] {e}")
+
+
+async def _gerar_post_automatico(uid: str):
+    posts_dia   = int(get_cfg("piloto_posts_dia",    "3",   uid))
+    topico      = get_cfg("piloto_topico",           "",    uid)
+    estilo      = get_cfg("piloto_estilo",   "engajador",   uid)
+    gerar_img   = get_cfg("piloto_imagem",       "false",   uid) == "true"
+    h_inicio    = int(get_cfg("piloto_h_inicio",     "8",   uid))
+    h_fim       = int(get_cfg("piloto_h_fim",       "22",   uid))
+    ultimo      = get_cfg("piloto_ultimo_post",      "",    uid)
+
+    if not topico:
+        return
+
+    # Checar horário (UTC)
+    agora = datetime.utcnow()
+    hora_local = agora.hour  # assume UTC; Railway está em UTC
+    if not (h_inicio <= hora_local < h_fim):
+        return
+
+    # Checar intervalo mínimo entre posts
+    intervalo_horas = 24 / max(posts_dia, 1)
+    if ultimo:
+        try:
+            dt_ultimo = datetime.fromisoformat(ultimo.replace("Z", ""))
+            if (agora - dt_ultimo).total_seconds() < intervalo_horas * 3600:
+                return
+        except Exception:
+            pass
+
+    # Buscar dados do canal para contexto
+    try:
+        canal_rows = (db.table("canal_posts").select("texto,reacoes")
+                      .eq("user_id", uid).order("capturado_em", desc=True).limit(5).execute())
+        contexto_canal = "\n".join(
+            f"- {r.get('texto','')[:80]} ({r.get('reacoes',0)} reações)"
+            for r in (canal_rows.data or [])
+        )
+    except Exception:
+        contexto_canal = ""
+
+    prompt = f"""Você é um especialista em marketing de conteúdo para Telegram.
+Gere UMA postagem para um canal sobre: {topico}
+Estilo: {estilo}
+{"Posts recentes do canal para referência de tom:\n" + contexto_canal if contexto_canal else ""}
+Regras:
+- Máximo 280 caracteres
+- Use emojis relevantes
+- Seja direto e envolvente
+- NÃO use markdown, apenas texto puro e emojis
+Retorne APENAS o texto do post, sem explicações."""
+
+    ai_client = get_anthropic_client(uid)
+    msg = ai_client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    texto = msg.content[0].text.strip()
+
+    # Agendar para daqui a 2 minutos
+    agendado_para = (agora + timedelta(minutes=2)).isoformat()
+    post_data = {
+        "texto": texto,
+        "tipo": "text",
+        "chat_id": get_chat_id(uid),
+        "agendado_para": agendado_para,
+        "status": "agendado",
+        "user_id": uid,
+        "recorrencia": "nenhuma",
+    }
+
+    # Gerar imagem se ativado
+    if gerar_img:
+        try:
+            oai_client = get_openai_client(uid)
+            if oai_client:
+                img_resp = oai_client.images.generate(
+                    model="dall-e-3", prompt=f"{topico}: {texto[:200]}",
+                    size="1024x1024", quality="standard", n=1
+                )
+                post_data["arquivo_url"] = img_resp.data[0].url
+                post_data["tipo"] = "photo"
+        except Exception as e:
+            print(f"[PILOTO IMG ERRO] {e}")
+
+    db.table("posts_agendados").insert(post_data).execute()
+
+    # Salvar log de atividade
+    log_atual = get_cfg("piloto_log", "[]", uid)
+    try:
+        log = json.loads(log_atual)
+    except Exception:
+        log = []
+    log.insert(0, {"ts": agora.isoformat(), "texto": texto[:120], "imagem": post_data.get("tipo") == "photo"})
+    log = log[:20]  # manter só os 20 últimos
+
+    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_ultimo_post", "valor": agora.isoformat()}).execute()
+    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_log", "valor": json.dumps(log, ensure_ascii=False)}).execute()
+    print(f"[PILOTO ✓] Post gerado para user {uid}: {texto[:60]}")
+
+
+@app.get("/piloto")
+async def piloto_status(request: Request):
+    uid = require_user(request)
+    chaves = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
+              "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log"]
+    cfg = {c: get_cfg(c, "", uid) for c in chaves}
+    cfg.setdefault("piloto_ativo",     "false")
+    cfg.setdefault("piloto_posts_dia", "3")
+    cfg.setdefault("piloto_estilo",    "engajador")
+    cfg.setdefault("piloto_imagem",    "false")
+    cfg.setdefault("piloto_h_inicio",  "8")
+    cfg.setdefault("piloto_h_fim",     "22")
+    try:
+        cfg["piloto_log"] = json.loads(cfg.get("piloto_log") or "[]")
+    except Exception:
+        cfg["piloto_log"] = []
+    return cfg
+
+
+@app.post("/piloto")
+async def piloto_salvar(request: Request):
+    uid = require_user(request)
+    body = await request.json()
+    permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
+                  "piloto_imagem", "piloto_h_inicio", "piloto_h_fim"]
+    for chave in permitidos:
+        if chave in body:
+            db.table("configuracoes").upsert(
+                {"user_id": uid, "chave": chave, "valor": str(body[chave])}
+            ).execute()
+    return {"ok": True}
+
+
+@app.post("/piloto/gerar-agora")
+async def piloto_gerar_agora(request: Request):
+    uid = require_user(request)
+    if get_cfg("piloto_topico", "", uid) == "":
+        raise HTTPException(status_code=400, detail="Configure o tópico do canal primeiro")
+    # Forçar gerando ao limpar o último post
+    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_ultimo_post", "valor": ""}).execute()
+    await _gerar_post_automatico(uid)
+    return {"ok": True}
 
 
 if __name__ == "__main__":
