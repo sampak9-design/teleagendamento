@@ -419,6 +419,43 @@ async def telegram_setup(request: Request):
     return result
 
 
+@app.get("/debug/bot-test")
+async def debug_bot_test(request: Request):
+    """Testa o bot: deleta webhook, busca updates diretamente, re-registra."""
+    uid   = require_user(request)
+    token = get_bot_token(uid)
+    if not token:
+        raise HTTPException(status_code=400, detail="Bot Token não configurado")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        # 1. Info atual do webhook
+        wh_info = (await client.get(f"https://api.telegram.org/bot{token}/getWebhookInfo")).json()
+
+        # 2. Deleta webhook temporariamente
+        await client.post(f"https://api.telegram.org/bot{token}/deleteWebhook", json={"drop_pending_updates": False})
+
+        # 3. Busca updates direto (polling)
+        updates_resp = (await client.get(f"https://api.telegram.org/bot{token}/getUpdates?limit=5")).json()
+
+        # 4. Re-registra webhook
+        webhook_url = str(request.base_url).rstrip("/").replace("http://", "https://") + "/telegram/webhook"
+        re_reg = (await client.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": webhook_url, "allowed_updates": ["channel_post", "message_reaction", "message_reaction_count", "chat_member"]},
+        )).json()
+
+    return {
+        "bot_token_inicio": token[:10] + "...",
+        "webhook_antes": {
+            "url":             wh_info.get("result", {}).get("url"),
+            "last_error":      wh_info.get("result", {}).get("last_error_message"),
+            "allowed_updates": wh_info.get("result", {}).get("allowed_updates"),
+        },
+        "updates_direto": updates_resp,
+        "webhook_re_registrado": re_reg,
+    }
+
+
 @app.get("/debug/webhook-log")
 async def debug_webhook_log(request: Request):
     require_user(request)
