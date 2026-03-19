@@ -80,11 +80,27 @@ def get_openai_client(user_id: str = ""):
     key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY, user_id)
     return openai.OpenAI(api_key=key) if key else None
 
+_app_url = ""
+
+async def job_keepalive():
+    """Ping no próprio app a cada 4 min para evitar sleep do Railway."""
+    global _app_url
+    if not _app_url:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.get(f"{_app_url}/health")
+            print("[KEEPALIVE] ok")
+    except Exception as e:
+        print(f"[KEEPALIVE ERRO] {e}")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler.add_job(verificar_e_enviar_posts,  "interval", minutes=1,  id="check_posts")
     scheduler.add_job(job_piloto_automatico,     "interval", minutes=15, id="piloto_auto")
     scheduler.add_job(job_capturar_membros,      "interval", hours=1,    id="capturar_membros")
+    scheduler.add_job(job_keepalive,             "interval", minutes=4,  id="keepalive")
     scheduler.start()
     print("[SCHEDULER] Iniciado — verificando posts a cada minuto")
     yield
@@ -101,6 +117,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health")
+async def health(request: Request):
+    global _app_url
+    if not _app_url:
+        _app_url = str(request.base_url).rstrip("/").replace("http://", "https://")
+        print(f"[APP URL] {_app_url}")
+    return {"status": "ok"}
 
 
 @app.get("/")
