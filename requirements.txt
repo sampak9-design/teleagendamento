@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+supabase
+httpx
+anthropic
+apscheduler
+python-dotenv
+python-multipart

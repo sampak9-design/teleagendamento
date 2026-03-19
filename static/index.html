@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TeleScheduler</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; display: flex; height: 100vh; overflow: hidden; font-size: 13px; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 3px; }
+
+    /* ─── SIDEBAR ─── */
+    .sidebar { width: 210px; min-width: 210px; background: #13151f; border-right: 1px solid #1e2235; display: flex; flex-direction: column; }
+    .sidebar-logo { padding: 14px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #1e2235; }
+    .logo-icon { width: 30px; height: 30px; background: linear-gradient(135deg, #4f6ef7, #7c3aed); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: white; flex-shrink: 0; }
+    .logo-text { font-size: 0.95rem; font-weight: 700; color: #e2e8f0; letter-spacing: -0.3px; }
+
+    .nav-section { padding: 10px 0 4px; }
+    .nav-label { padding: 6px 16px 4px; font-size: 0.68rem; color: #3d4466; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 16px; cursor: pointer; color: #6b7280; font-size: 0.82rem; font-weight: 500; transition: all 0.12s; position: relative; }
+    .nav-item:hover { color: #c9d1e0; background: #191c2d; }
+    .nav-item.ativo { color: #fff; background: #1e2235; }
+    .nav-item.ativo::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; background: #4f6ef7; border-radius: 0 3px 3px 0; }
+    .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.7; }
+    .nav-item.ativo svg { opacity: 1; }
+    .nav-badge { margin-left: auto; background: #4f6ef7; color: white; font-size: 0.65rem; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+
+    .sidebar-bottom { margin-top: auto; padding: 12px; border-top: 1px solid #1e2235; }
+    .bot-status { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-radius: 8px; }
+    .bot-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; box-shadow: 0 0 6px #22c55e80; }
+    .bot-dot.off { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
+    .bot-info { flex: 1; min-width: 0; }
+    .bot-name { font-size: 0.8rem; font-weight: 600; color: #e2e8f0; }
+    .bot-sub { font-size: 0.7rem; color: #6b7280; }
+
+    /* ─── MAIN ─── */
+    .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+
+    /* ─── TOPBAR ─── */
+    .topbar { background: #13151f; border-bottom: 1px solid #1e2235; padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 8px; }
+    .topbar-title { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
+    .topbar-sub { font-size: 0.75rem; color: #4a5568; }
+    .topbar-sep { color: #2d3148; margin: 0 4px; }
+
+    /* ─── CONTENT ─── */
+    .content { padding: 24px; flex: 1; }
+    .section { display: none; }
+    .section.ativa { display: block; }
+
+    /* ─── STAT CARDS ─── */
+    .cards-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+    .card { background: #13151f; border: 1px solid #1e2235; border-radius: 10px; padding: 16px; }
+    .card-label { font-size: 0.72rem; color: #6b7280; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .card-value { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; line-height: 1; }
+    .card-sub { font-size: 0.72rem; color: #4a5568; margin-top: 4px; }
+    .card-accent { border-left: 3px solid #4f6ef7; }
+    .card-green { border-left: 3px solid #22c55e; }
+    .card-yellow { border-left: 3px solid #f59e0b; }
+    .card-purple { border-left: 3px solid #a855f7; }
+
+    /* ─── PANELS ─── */
+    .panel { background: #13151f; border: 1px solid #1e2235; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .panel-title { font-size: 0.82rem; font-weight: 600; color: #c9d1e0; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .panel-title svg { width: 14px; height: 14px; opacity: 0.7; }
+
+    /* ─── FORM ─── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: 0.75rem; font-weight: 500; color: #8892a4; }
+    input, textarea, select {
+      background: #0f1117; border: 1px solid #1e2235; border-radius: 7px;
+      color: #e2e8f0; font-size: 0.82rem; padding: 8px 12px;
+      font-family: inherit; outline: none; transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus, textarea:focus, select:focus { border-color: #4f6ef7; }
+    textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+    select option { background: #13151f; }
+
+    /* ─── BUTTONS ─── */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; border: none; cursor: pointer; font-size: 0.82rem; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+    .btn-primary { background: #4f6ef7; color: white; }
+    .btn-primary:hover { background: #4060e8; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: #6b7280; border: 1px solid #1e2235; }
+    .btn-ghost:hover { border-color: #4f6ef7; color: #4f6ef7; background: #1a1d2e; }
+    .btn-danger { background: transparent; color: #ef4444; border: 1px solid #1e2235; }
+    .btn-danger:hover { background: #1f1014; border-color: #ef4444; }
+    .btn-purple { background: #7c3aed; color: white; }
+    .btn-purple:hover { background: #6d28d9; }
+    .btn-purple:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-green { background: #16a34a; color: white; }
+    .btn-green:hover { background: #15803d; }
+
+    /* ─── TABLE ─── */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 0.7rem; font-weight: 600; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid #1e2235; }
+    td { padding: 10px 12px; border-bottom: 1px solid #13151f; font-size: 0.8rem; color: #c9d1e0; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #191c2d20; }
+
+    /* ─── BADGES ─── */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; font-weight: 600; }
+    .badge-green { background: #14532d30; color: #22c55e; border: 1px solid #22c55e30; }
+    .badge-blue { background: #1e3a8a30; color: #60a5fa; border: 1px solid #60a5fa30; }
+    .badge-yellow { background: #78350f30; color: #f59e0b; border: 1px solid #f59e0b30; }
+    .badge-gray { background: #1f2937; color: #6b7280; border: 1px solid #374151; }
+
+    /* ─── TIPO ICONS ─── */
+    .tipo-icon { width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+    .tipo-text { background: #1e3a8a20; }
+    .tipo-photo { background: #14532d20; }
+    .tipo-video { background: #78350f20; }
+    .tipo-audio { background: #4c1d9520; }
+    .tipo-document { background: #1f2937; }
+
+    /* ─── IA OUTPUT ─── */
+    .ia-output { background: #0f1117; border: 1px solid #1e2235; border-radius: 8px; padding: 16px; min-height: 120px; font-size: 0.83rem; line-height: 1.6; color: #c9d1e0; white-space: pre-wrap; font-family: inherit; }
+    .ia-output.loading { color: #4a5568; font-style: italic; }
+
+    /* ─── SCORE ─── */
+    .score-circle { width: 80px; height: 80px; border-radius: 50%; background: conic-gradient(#4f6ef7 0deg, #1e2235 0deg); display: flex; align-items: center; justify-content: center; flex-direction: column; flex-shrink: 0; }
+    .score-num { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
+    .score-label { font-size: 0.6rem; color: #6b7280; }
+
+    /* ─── ANÁLISE CARDS ─── */
+    .analise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .analise-item { padding: 6px 0; font-size: 0.8rem; color: #c9d1e0; display: flex; align-items: flex-start; gap: 8px; }
+    .analise-item::before { content: '•'; color: #4f6ef7; font-weight: 700; flex-shrink: 0; }
+    .analise-item.green::before { color: #22c55e; }
+    .cal-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1e223540; font-size: 0.8rem; }
+    .cal-day { font-weight: 600; color: #8892a4; width: 80px; flex-shrink: 0; font-size: 0.75rem; }
+    .cal-content { color: #c9d1e0; }
+
+    /* ─── PRÓXIMO POST ─── */
+    .proximo-card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 8px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+    .proximo-time { text-align: center; }
+    .proximo-time .hora { font-size: 1.3rem; font-weight: 700; color: #4f6ef7; }
+    .proximo-time .data { font-size: 0.7rem; color: #6b7280; }
+    .proximo-divider { width: 1px; height: 40px; background: #1e2235; }
+    .proximo-texto { flex: 1; font-size: 0.82rem; color: #c9d1e0; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+    /* ─── EMPTY STATE ─── */
+    .empty { text-align: center; padding: 48px 24px; color: #4a5568; }
+    .empty svg { width: 40px; height: 40px; margin: 0 auto 12px; display: block; opacity: 0.3; }
+    .empty p { font-size: 0.82rem; }
+
+    /* ─── TOAST ─── */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #1e2235; border: 1px solid #2d3148; color: #e2e8f0; padding: 10px 18px; border-radius: 8px; font-size: 0.8rem; z-index: 9999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; }
+    #toast.success { border-color: #22c55e60; }
+    #toast.error { border-color: #ef444460; }
+
+    /* ─── SPINNER ─── */
+    .spinner { width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── TONS SELECTOR ─── */
+    .tons-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ton-btn { padding: 5px 12px; border-radius: 20px; border: 1px solid #1e2235; background: transparent; color: #6b7280; font-size: 0.75rem; cursor: pointer; font-family: inherit; transition: all 0.12s; }
+    .ton-btn.ativo { border-color: #4f6ef7; background: #1a1d2e; color: #4f6ef7; }
+    .ton-btn:hover { border-color: #2d3148; color: #c9d1e0; }
+  </style>
+</head>
+<body>
+
+<!-- ─── SIDEBAR ─── -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">✈</div>
+    <span class="logo-text">TeleScheduler</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Principal</div>
+    <div class="nav-item ativo" onclick="navegar('dashboard', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="navegar('novo-post', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Novo Post
+    </div>
+    <div class="nav-item" onclick="navegar('agendados', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      Agendados
+      <span class="nav-badge" id="badge-agendados">0</span>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Inteligência Artificial</div>
+    <div class="nav-item" onclick="navegar('ia-criativa', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      IA Criativa
+    </div>
+    <div class="nav-item" onclick="navegar('analise', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Análise do Canal
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <div class="bot-status">
+      <div class="bot-dot" id="bot-dot"></div>
+      <div class="bot-info">
+        <div class="bot-name">Bot Telegram</div>
+        <div class="bot-sub" id="bot-sub">Verificando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MAIN ─── -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-title" id="topbar-title">Dashboard</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:0.75rem;color:#4a5568;" id="topbar-time"></span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ═══════════════ DASHBOARD ═══════════════ -->
+    <div class="section ativa" id="section-dashboard">
+      <div class="cards-grid">
+        <div class="card card-accent">
+          <div class="card-label">Total de Posts</div>
+          <div class="card-value" id="stat-total">—</div>
+          <div class="card-sub">Todos os tempos</div>
+        </div>
+        <div class="card card-yellow">
+          <div class="card-label">Agendados</div>
+          <div class="card-value" id="stat-agendados">—</div>
+          <div class="card-sub">Aguardando envio</div>
+        </div>
+        <div class="card card-green">
+          <div class="card-label">Enviados</div>
+          <div class="card-value" id="stat-enviados">—</div>
+          <div class="card-sub">Com sucesso</div>
+        </div>
+        <div class="card card-purple">
+          <div class="card-label">Taxa de Envio</div>
+          <div class="card-value" id="stat-taxa">—</div>
+          <div class="card-sub">Eficiência</div>
+        </div>
+      </div>
+
+      <!-- Próximo post -->
+      <div class="panel" id="panel-proximo" style="display:none;">
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Próximo Post Agendado
+        </div>
+        <div class="proximo-card">
+          <div class="proximo-time">
+            <div class="hora" id="prox-hora">—</div>
+            <div class="data" id="prox-data">—</div>
+          </div>
+          <div class="proximo-divider"></div>
+          <div class="proximo-texto" id="prox-texto">—</div>
+          <span class="badge badge-blue" id="prox-tipo">text</span>
+        </div>
+      </div>
+
+      <!-- Tipos de post -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="panel">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Posts por Tipo
+          </div>
+          <div id="tipos-chart">
+            <div class="empty"><p>Nenhum dado ainda</p></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Sugestão Rápida da IA
+          </div>
+          <div id="ia-sugestao" class="ia-output loading">Clique em "Análise do Canal" para obter sugestões da IA...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ NOVO POST ═══════════════ -->
+    <div class="section" id="section-novo-post">
+      <div class="panel" style="max-width:680px;">
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Criar Novo Post
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group full">
+            <label>Texto / Legenda</label>
+            <textarea id="np-texto" placeholder="Escreva o texto do post aqui... (suporta HTML do Telegram: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;)"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Tipo de Conteúdo</label>
+            <select id="np-tipo" onchange="toggleArquivoUrl()">
+              <option value="text">📝 Texto</option>
+              <option value="photo">🖼️ Imagem</option>
+              <option value="video">🎬 Vídeo</option>
+              <option value="audio">🎵 Áudio</option>
+              <option value="document">📎 Documento</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Recorrência</label>
+            <select id="np-recorrencia">
+              <option value="nenhuma">Sem recorrência</option>
+              <option value="diaria">Diária</option>
+              <option value="semanal">Semanal</option>
+              <option value="mensal">Mensal (30 dias)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="grupo-arquivo" style="display:none;">
+            <label>URL do Arquivo</label>
+            <input id="np-arquivo-url" type="url" placeholder="https://...">
+          </div>
+
+          <div class="form-group">
+            <label>Chat ID / Canal (opcional)</label>
+            <input id="np-chat-id" type="text" placeholder="@meucanal ou -100123456789">
+          </div>
+
+          <div class="form-group">
+            <label>Data e Hora de Envio</label>
+            <input id="np-datetime" type="datetime-local">
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-primary" onclick="criarPost()" id="btn-criar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Agendar Post
+          </button>
+          <button class="btn btn-ghost" onclick="limparForm()">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ AGENDADOS ═══════════════ -->
+    <div class="section" id="section-agendados">
+      <div class="panel" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e2235;">
+          <div class="panel-title" style="margin:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            Todos os Posts Agendados
+          </div>
+          <button class="btn btn-ghost" onclick="carregarPosts()" style="padding:5px 12px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Atualizar
+          </button>
+        </div>
+        <div id="tabela-posts">
+          <div class="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <p>Carregando posts...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ IA CRIATIVA ═══════════════ -->
+    <div class="section" id="section-ia-criativa">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;">
+        <div class="panel">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Gerar Post com IA
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label>Tema do Post</label>
+            <input id="ia-tema" type="text" placeholder="Ex: lançamento de produto, dica de marketing...">
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Tom de Voz</label>
+            <div class="tons-grid" id="tons-grid">
+              <button class="ton-btn ativo" onclick="selecionarTom(this, 'profissional')">Profissional</button>
+              <button class="ton-btn" onclick="selecionarTom(this, 'casual')">Casual</button>
+              <button class="ton-btn" onclick="selecionarTom(this, 'motivacional')">Motivacional</button>
+              <button class="ton-btn" onclick="selecionarTom(this, 'humoristico')">Humorístico</button>
+              <button class="ton-btn" onclick="selecionarTom(this, 'educativo')">Educativo</button>
+              <button class="ton-btn" onclick="selecionarTom(this, 'urgente')">Urgente</button>
+            </div>
+          </div>
+
+          <button class="btn btn-purple" onclick="gerarPost()" id="btn-gerar" style="width:100%;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Gerar Post
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title" style="justify-content:space-between;">
+            <span style="display:flex;align-items:center;gap:8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Post Gerado
+            </span>
+            <button class="btn btn-ghost" id="btn-usar" onclick="usarPostGerado()" style="padding:4px 10px;display:none;">
+              Usar no Agendador →
+            </button>
+          </div>
+          <div class="ia-output loading" id="ia-resultado">O post gerado pela IA aparecerá aqui...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ ANÁLISE ═══════════════ -->
+    <div class="section" id="section-analise">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div></div>
+        <button class="btn btn-purple" onclick="rodarAnalise()" id="btn-analise">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Analisar Canal com IA
+        </button>
+      </div>
+
+      <div id="analise-resultado" style="display:none;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;margin-bottom:16px;align-items:center;" class="panel">
+          <div class="score-circle" id="score-circle">
+            <span class="score-num" id="score-num">—</span>
+            <span class="score-label">Score</span>
+          </div>
+          <div>
+            <div style="font-size:0.75rem;color:#6b7280;margin-bottom:4px;">SAÚDE DO CANAL</div>
+            <div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;" id="score-descricao">—</div>
+            <div style="font-size:0.78rem;color:#4a5568;margin-top:4px;">Análise baseada nos seus posts agendados e enviados</div>
+          </div>
+        </div>
+
+        <div class="analise-grid">
+          <div class="panel">
+            <div class="panel-title" style="color:#22c55e;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Pontos Fortes
+            </div>
+            <div id="lista-fortes"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title" style="color:#f59e0b;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Sugestões de Melhoria
+            </div>
+            <div id="lista-sugestoes"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title" style="color:#4f6ef7;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/></svg>
+              Posts que Engajam
+            </div>
+            <div id="lista-engajam"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title" style="color:#ef4444;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/></svg>
+              Posts que Causam Saídas
+            </div>
+            <div id="lista-afastam"></div>
+          </div>
+
+          <div class="panel" style="grid-column:1/-1;">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Calendário Ideal de Postagem
+            </div>
+            <div id="calendario-ideal"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="analise-empty" class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <p>Clique em "Analisar Canal com IA" para obter insights detalhados</p>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<div id="toast"></div>
+
+<script>
+// ── Estado ─────────────────────────────────────────────────────────
+let tomSelecionado = 'profissional';
+let posts = [];
+
+// ── Navegação ──────────────────────────────────────────────────────
+function navegar(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('ativa'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
+  document.getElementById('section-' + id).classList.add('ativa');
+  el.classList.add('ativo');
+
+  const titulos = {
+    'dashboard': 'Dashboard',
+    'novo-post': 'Novo Post',
+    'agendados': 'Posts Agendados',
+    'ia-criativa': 'IA Criativa',
+    'analise': 'Análise do Canal',
+  };
+  document.getElementById('topbar-title').textContent = titulos[id] || id;
+
+  if (id === 'agendados') carregarPosts();
+  if (id === 'dashboard') carregarStats();
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(msg, tipo = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + tipo;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// ── Stats / Dashboard ──────────────────────────────────────────────
+async function carregarStats() {
+  try {
+    const r = await fetch('/stats');
+    const d = await r.json();
+
+    document.getElementById('stat-total').textContent = d.total ?? 0;
+    document.getElementById('stat-agendados').textContent = d.agendados ?? 0;
+    document.getElementById('stat-enviados').textContent = d.enviados ?? 0;
+    const taxa = d.total > 0 ? Math.round(d.enviados / d.total * 100) + '%' : '0%';
+    document.getElementById('stat-taxa').textContent = taxa;
+    document.getElementById('badge-agendados').textContent = d.agendados ?? 0;
+
+    // Próximo post
+    const panel = document.getElementById('panel-proximo');
+    if (d.proximo) {
+      panel.style.display = '';
+      const dt = new Date(d.proximo.agendado_para);
+      document.getElementById('prox-hora').textContent = dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      document.getElementById('prox-data').textContent = dt.toLocaleDateString('pt-BR', {day:'2-digit',month:'short'});
+      document.getElementById('prox-texto').textContent = d.proximo.texto;
+      document.getElementById('prox-tipo').textContent = tipoLabel(d.proximo.tipo);
+    } else {
+      panel.style.display = 'none';
+    }
+
+    // Tipos chart (simples)
+    const tiposEl = document.getElementById('tipos-chart');
+    if (d.tipos && Object.keys(d.tipos).length > 0) {
+      const total = Object.values(d.tipos).reduce((a,b)=>a+b,0);
+      tiposEl.innerHTML = Object.entries(d.tipos).map(([t,n]) => `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:0.78rem;color:#c9d1e0;">${tipoLabel(t)}</span>
+            <span style="font-size:0.78rem;color:#6b7280;">${n}</span>
+          </div>
+          <div style="background:#1e2235;border-radius:4px;height:5px;">
+            <div style="background:#4f6ef7;border-radius:4px;height:5px;width:${Math.round(n/total*100)}%;transition:width 0.4s;"></div>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      tiposEl.innerHTML = '<div class="empty" style="padding:20px;"><p>Nenhum post ainda</p></div>';
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function tipoLabel(tipo) {
+  return {'text':'📝 Texto','photo':'🖼️ Imagem','video':'🎬 Vídeo','audio':'🎵 Áudio','document':'📎 Documento'}[tipo] || tipo;
+}
+
+// ── Posts Agendados ────────────────────────────────────────────────
+async function carregarPosts() {
+  try {
+    const r = await fetch('/posts');
+    const d = await r.json();
+    posts = d.posts || [];
+    renderPosts();
+    document.getElementById('badge-agendados').textContent = posts.filter(p=>p.status==='agendado').length;
+  } catch (e) {
+    document.getElementById('tabela-posts').innerHTML = '<div class="empty"><p>Erro ao carregar posts</p></div>';
+  }
+}
+
+function renderPosts() {
+  const el = document.getElementById('tabela-posts');
+  if (!posts.length) {
+    el.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><p>Nenhum post agendado ainda</p></div>';
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Texto</th>
+          <th>Agendado Para</th>
+          <th>Recorrência</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${posts.map(p => `
+          <tr>
+            <td><span class="tipo-icon tipo-${p.tipo}">${tipoEmoji(p.tipo)}</span></td>
+            <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(p.texto)}">${esc(p.texto.substring(0,60))}${p.texto.length>60?'…':''}</td>
+            <td style="white-space:nowrap;">${formatarData(p.agendado_para)}</td>
+            <td>${recorrenciaLabel(p.recorrencia)}</td>
+            <td>${statusBadge(p.status)}</td>
+            <td>
+              ${p.status === 'agendado' ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:0.72rem;" onclick="removerPost(${p.id})">Remover</button>` : ''}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+}
+
+function tipoEmoji(t) {
+  return {'text':'📝','photo':'🖼️','video':'🎬','audio':'🎵','document':'📎'}[t]||'📝';
+}
+
+function statusBadge(s) {
+  if (s === 'enviado') return '<span class="badge badge-green">✓ Enviado</span>';
+  if (s === 'agendado') return '<span class="badge badge-yellow">⏳ Agendado</span>';
+  return `<span class="badge badge-gray">${s}</span>`;
+}
+
+function recorrenciaLabel(r) {
+  return {'nenhuma':'—','diaria':'🔁 Diária','semanal':'🔁 Semanal','mensal':'🔁 Mensal'}[r] || r || '—';
+}
+
+function formatarData(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  } catch { return iso; }
+}
+
+function esc(str) {
+  return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function removerPost(id) {
+  if (!confirm('Remover este post?')) return;
+  try {
+    await fetch('/posts/' + id, {method:'DELETE'});
+    toast('Post removido', 'success');
+    carregarPosts();
+  } catch (e) {
+    toast('Erro ao remover', 'error');
+  }
+}
+
+// ── Novo Post ──────────────────────────────────────────────────────
+function toggleArquivoUrl() {
+  const tipo = document.getElementById('np-tipo').value;
+  const g = document.getElementById('grupo-arquivo');
+  g.style.display = tipo !== 'text' ? '' : 'none';
+}
+
+function limparForm() {
+  ['np-texto','np-arquivo-url','np-chat-id','np-datetime'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('np-tipo').value = 'text';
+  document.getElementById('np-recorrencia').value = 'nenhuma';
+  toggleArquivoUrl();
+}
+
+async function criarPost() {
+  const texto = document.getElementById('np-texto').value.trim();
+  const tipo = document.getElementById('np-tipo').value;
+  const recorrencia = document.getElementById('np-recorrencia').value;
+  const arquivoUrl = document.getElementById('np-arquivo-url').value.trim();
+  const chatId = document.getElementById('np-chat-id').value.trim();
+  const dtLocal = document.getElementById('np-datetime').value;
+
+  if (!texto) { toast('Digite o texto do post', 'error'); return; }
+  if (!dtLocal) { toast('Selecione a data e hora', 'error'); return; }
+
+  // Converte datetime-local para ISO (UTC)
+  const dtISO = new Date(dtLocal).toISOString();
+
+  const btn = document.getElementById('btn-criar');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Agendando...';
+
+  try {
+    const r = await fetch('/posts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto, tipo, recorrencia, arquivo_url: arquivoUrl||null, chat_id: chatId||null, agendado_para: dtISO}),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast('Post agendado com sucesso!', 'success');
+      limparForm();
+    } else {
+      toast('Erro: ' + d.detail, 'error');
+    }
+  } catch (e) {
+    toast('Erro de conexão', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Agendar Post';
+  }
+}
+
+// ── IA Criativa ────────────────────────────────────────────────────
+function selecionarTom(el, tom) {
+  document.querySelectorAll('.ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  tomSelecionado = tom;
+}
+
+async function gerarPost() {
+  const tema = document.getElementById('ia-tema').value.trim();
+  if (!tema) { toast('Digite um tema para o post', 'error'); return; }
+
+  const btn = document.getElementById('btn-gerar');
+  const resultado = document.getElementById('ia-resultado');
+  const btnUsar = document.getElementById('btn-usar');
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Gerando...';
+  resultado.className = 'ia-output loading';
+  resultado.textContent = 'A IA está criando seu post...';
+  btnUsar.style.display = 'none';
+
+  try {
+    const r = await fetch('/ia/gerar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tema, tom: tomSelecionado}),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      resultado.className = 'ia-output';
+      resultado.textContent = d.texto;
+      btnUsar.style.display = '';
+    } else {
+      resultado.textContent = 'Erro: ' + d.detail;
+      toast('Erro ao gerar post', 'error');
+    }
+  } catch (e) {
+    resultado.textContent = 'Erro de conexão';
+    toast('Erro de conexão', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg> Gerar Post';
+  }
+}
+
+function usarPostGerado() {
+  const texto = document.getElementById('ia-resultado').textContent;
+  // Navegar para Novo Post e preencher o texto
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
+  const navNovo = [...document.querySelectorAll('.nav-item')].find(el => el.textContent.trim().startsWith('Novo Post'));
+  if (navNovo) navegar('novo-post', navNovo);
+  setTimeout(() => {
+    document.getElementById('np-texto').value = texto;
+    toast('Post adicionado ao agendador!', 'success');
+  }, 100);
+}
+
+// ── Análise do Canal ───────────────────────────────────────────────
+async function rodarAnalise() {
+  const btn = document.getElementById('btn-analise');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Analisando...';
+  document.getElementById('analise-resultado').style.display = 'none';
+  document.getElementById('analise-empty').style.display = '';
+
+  try {
+    const r = await fetch('/ia/analise');
+    const d = await r.json();
+
+    if (!r.ok) { toast('Erro: ' + d.detail, 'error'); return; }
+
+    const score = d.score || 0;
+    document.getElementById('score-num').textContent = score;
+
+    // Score circle com conic-gradient
+    const graus = Math.round(score / 100 * 360);
+    const cor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+    document.getElementById('score-circle').style.background = `conic-gradient(${cor} ${graus}deg, #1e2235 ${graus}deg)`;
+    document.getElementById('score-descricao').textContent =
+      score >= 80 ? 'Canal saudável e bem gerenciado' :
+      score >= 60 ? 'Canal com bom potencial' :
+      score >= 40 ? 'Canal necessita melhorias' : 'Canal precisa de atenção urgente';
+
+    // Pontos fortes
+    document.getElementById('lista-fortes').innerHTML =
+      (d.pontos_fortes||[]).map(p => `<div class="analise-item green">${p}</div>`).join('') ||
+      '<div class="analise-item">Nenhum dado disponível</div>';
+
+    // Sugestões
+    document.getElementById('lista-sugestoes').innerHTML =
+      (d.sugestoes||[]).map(s => `<div class="analise-item">${s}</div>`).join('') ||
+      '<div class="analise-item">Nenhuma sugestão</div>';
+
+    // Posts que engajam
+    document.getElementById('lista-engajam').innerHTML =
+      (d.posts_que_engajam||[]).map(s => `<div class="analise-item green">${s}</div>`).join('') ||
+      '<div class="analise-item" style="color:#4a5568;">Dados insuficientes — aguardando reações</div>';
+
+    // Posts que afastam
+    document.getElementById('lista-afastam').innerHTML =
+      (d.posts_que_afastam||[]).map(s => `<div class="analise-item" style="color:#ef4444;">${s}</div>`).join('') ||
+      '<div class="analise-item" style="color:#4a5568;">Dados insuficientes — aguardando saídas</div>';
+
+    // Calendário
+    document.getElementById('calendario-ideal').innerHTML =
+      (d.calendario_ideal||[]).map(c => {
+        const [dia, ...resto] = c.split(':');
+        return `<div class="cal-item"><span class="cal-day">${dia}</span><span class="cal-content">${resto.join(':').trim()}</span></div>`;
+      }).join('') || '<div style="color:#4a5568;font-size:0.8rem;padding:8px 0;">Nenhum calendário gerado</div>';
+
+    // Sugestão rápida no dashboard
+    const sugestoes = d.sugestoes || [];
+    document.getElementById('ia-sugestao').className = 'ia-output';
+    document.getElementById('ia-sugestao').textContent =
+      sugestoes.length ? '💡 ' + sugestoes.join('\n\n💡 ') : 'Nenhuma sugestão disponível.';
+
+    document.getElementById('analise-resultado').style.display = '';
+    document.getElementById('analise-empty').style.display = 'none';
+    toast('Análise concluída!', 'success');
+  } catch (e) {
+    toast('Erro ao analisar', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Analisar Canal com IA';
+  }
+}
+
+// ── Relógio ────────────────────────────────────────────────────────
+function atualizarRelogio() {
+  document.getElementById('topbar-time').textContent =
+    new Date().toLocaleString('pt-BR', {weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+
+// ── Status do Bot ──────────────────────────────────────────────────
+async function checarBot() {
+  try {
+    const r = await fetch('/stats');
+    const dot = document.getElementById('bot-dot');
+    const sub = document.getElementById('bot-sub');
+    if (r.ok) {
+      dot.className = 'bot-dot';
+      sub.textContent = 'Scheduler ativo';
+    } else {
+      dot.className = 'bot-dot off';
+      sub.textContent = 'Offline';
+    }
+  } catch {
+    document.getElementById('bot-dot').className = 'bot-dot off';
+    document.getElementById('bot-sub').textContent = 'Sem conexão';
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────
+fetch('/config').then(r=>r.json()).then(d=>{
+  if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
+});
+
+atualizarRelogio();
+setInterval(atualizarRelogio, 30000);
+carregarStats();
+checarBot();
+setInterval(checarBot, 30000);
+
+// Definir datetime mínimo como agora
+const npdt = document.getElementById('np-datetime');
+const agora = new Date();
+agora.setMinutes(agora.getMinutes() + 5);
+npdt.min = agora.toISOString().slice(0,16);
+npdt.value = agora.toISOString().slice(0,16);
+</script>
+</body>
+</html>
