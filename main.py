@@ -108,24 +108,37 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ── Telegram ──────────────────────────────────────────────────────
-async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text", arquivo_url: str = None):
-    base = f"https://api.telegram.org/bot{get_bot_token()}"
+async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
+                          arquivo_url: str = None, cta_botao: str = None, cta_url: str = None,
+                          bot_token: str = None):
+    token = bot_token or get_bot_token()
+    base  = f"https://api.telegram.org/bot{token}"
+
+    markup = None
+    if cta_botao and cta_url:
+        markup = {"inline_keyboard": [[{"text": cta_botao, "url": cta_url}]]}
+
     async with httpx.AsyncClient() as client:
         if tipo == "photo" and arquivo_url:
-            resp = await client.post(f"{base}/sendPhoto",
-                json={"chat_id": chat_id, "photo": arquivo_url, "caption": texto, "parse_mode": "HTML"})
+            payload = {"chat_id": chat_id, "photo": arquivo_url, "caption": texto, "parse_mode": "HTML"}
+            if markup: payload["reply_markup"] = markup
+            resp = await client.post(f"{base}/sendPhoto", json=payload)
         elif tipo == "video" and arquivo_url:
-            resp = await client.post(f"{base}/sendVideo",
-                json={"chat_id": chat_id, "video": arquivo_url, "caption": texto, "parse_mode": "HTML"})
+            payload = {"chat_id": chat_id, "video": arquivo_url, "caption": texto, "parse_mode": "HTML"}
+            if markup: payload["reply_markup"] = markup
+            resp = await client.post(f"{base}/sendVideo", json=payload)
         elif tipo == "audio" and arquivo_url:
-            resp = await client.post(f"{base}/sendAudio",
-                json={"chat_id": chat_id, "audio": arquivo_url, "caption": texto, "parse_mode": "HTML"})
+            payload = {"chat_id": chat_id, "audio": arquivo_url, "caption": texto, "parse_mode": "HTML"}
+            if markup: payload["reply_markup"] = markup
+            resp = await client.post(f"{base}/sendAudio", json=payload)
         elif tipo == "document" and arquivo_url:
-            resp = await client.post(f"{base}/sendDocument",
-                json={"chat_id": chat_id, "document": arquivo_url, "caption": texto, "parse_mode": "HTML"})
+            payload = {"chat_id": chat_id, "document": arquivo_url, "caption": texto, "parse_mode": "HTML"}
+            if markup: payload["reply_markup"] = markup
+            resp = await client.post(f"{base}/sendDocument", json=payload)
         else:
-            resp = await client.post(f"{base}/sendMessage",
-                json={"chat_id": chat_id, "text": texto, "parse_mode": "HTML"})
+            payload = {"chat_id": chat_id, "text": texto, "parse_mode": "HTML"}
+            if markup: payload["reply_markup"] = markup
+            resp = await client.post(f"{base}/sendMessage", json=payload)
     return resp.json()
 
 
@@ -142,12 +155,16 @@ async def verificar_e_enviar_posts():
 
         for post in posts:
             try:
-                chat_id = post.get("chat_id") or get_chat_id()
+                uid     = post.get("user_id", "")
+                chat_id = post.get("chat_id") or get_chat_id(uid)
                 res = await enviar_telegram(
                     chat_id=chat_id,
                     texto=post.get("texto", ""),
                     tipo=post.get("tipo", "text"),
                     arquivo_url=post.get("arquivo_url"),
+                    cta_botao=post.get("cta_botao"),
+                    cta_url=post.get("cta_url"),
+                    bot_token=get_bot_token(uid) if uid else None,
                 )
 
                 if res.get("ok"):
@@ -761,6 +778,9 @@ async def _gerar_post_automatico(uid: str):
     h_inicio    = int(get_cfg("piloto_h_inicio",     "8",   uid))
     h_fim       = int(get_cfg("piloto_h_fim",       "22",   uid))
     ultimo      = get_cfg("piloto_ultimo_post",      "",    uid)
+    cta_ativo   = get_cfg("piloto_cta_ativo",    "false",   uid) == "true"
+    cta_botao   = get_cfg("piloto_cta_botao",        "",    uid)
+    cta_url     = get_cfg("piloto_cta_url",          "",    uid)
 
     if not topico:
         return
@@ -822,6 +842,9 @@ Retorne APENAS o texto do post, sem explicações."""
         "user_id": uid,
         "recorrencia": "nenhuma",
     }
+    if cta_ativo and cta_botao and cta_url:
+        post_data["cta_botao"] = cta_botao
+        post_data["cta_url"]   = cta_url
 
     # Gerar imagem se ativado
     if gerar_img:
@@ -857,7 +880,8 @@ Retorne APENAS o texto do post, sem explicações."""
 async def piloto_status(request: Request):
     uid = require_user(request)
     chaves = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
-              "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log"]
+              "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log",
+              "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
     cfg = {c: get_cfg(c, "", uid) for c in chaves}
     cfg.setdefault("piloto_ativo",     "false")
     cfg.setdefault("piloto_posts_dia", "3")
@@ -865,6 +889,7 @@ async def piloto_status(request: Request):
     cfg.setdefault("piloto_imagem",    "false")
     cfg.setdefault("piloto_h_inicio",  "8")
     cfg.setdefault("piloto_h_fim",     "22")
+    cfg.setdefault("piloto_cta_ativo", "false")
     try:
         cfg["piloto_log"] = json.loads(cfg.get("piloto_log") or "[]")
     except Exception:
@@ -877,7 +902,8 @@ async def piloto_salvar(request: Request):
     uid = require_user(request)
     body = await request.json()
     permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
-                  "piloto_imagem", "piloto_h_inicio", "piloto_h_fim"]
+                  "piloto_imagem", "piloto_h_inicio", "piloto_h_fim",
+                  "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
     for chave in permitidos:
         if chave in body:
             db.table("configuracoes").upsert(

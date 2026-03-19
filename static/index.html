@@ -979,6 +979,30 @@
               <input type="number" id="piloto-h-fim" class="form-control" min="1" max="24" value="22">
             </div>
           </div>
+          <!-- CTA Button -->
+          <div style="margin-top:14px;padding:12px;background:#0d1117;border-radius:8px;border:1px solid #2d3347;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <span style="color:#d1d5db;font-size:.85rem;font-weight:600;">Botão CTA nos posts</span>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <div class="toggle-wrap" onclick="pilotoCTAToggle()">
+                  <div class="toggle-track" id="cta-toggle-track">
+                    <div class="toggle-thumb"></div>
+                  </div>
+                </div>
+                <span style="color:#6b7280;font-size:.8rem;" id="cta-toggle-label">Desativado</span>
+              </label>
+            </div>
+            <div id="cta-fields" style="display:none;">
+              <div class="form-group" style="margin-bottom:8px;">
+                <label class="form-label">Texto do Botão</label>
+                <input type="text" id="piloto-cta-botao" class="form-control" placeholder="Ex: Saiba mais, Acesse agora, Entrar no grupo...">
+              </div>
+              <div class="form-group">
+                <label class="form-label">URL do Botão</label>
+                <input type="url" id="piloto-cta-url" class="form-control" placeholder="https://...">
+              </div>
+            </div>
+          </div>
           <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="pilotoSalvar()" id="btn-piloto-salvar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             Salvar Configuração
@@ -1945,6 +1969,11 @@ async function carregarPiloto() {
     document.getElementById('piloto-h-inicio').value  = d.piloto_h_inicio  || '8';
     document.getElementById('piloto-h-fim').value     = d.piloto_h_fim     || '22';
 
+    const ctaAtivo = d.piloto_cta_ativo === 'true';
+    _atualizarUICTA(ctaAtivo);
+    document.getElementById('piloto-cta-botao').value = d.piloto_cta_botao || '';
+    document.getElementById('piloto-cta-url').value   = d.piloto_cta_url   || '';
+
     if (d.piloto_ultimo_post) {
       const dt = new Date(d.piloto_ultimo_post);
       document.getElementById('piloto-ultimo-txt').textContent =
@@ -1956,6 +1985,26 @@ async function carregarPiloto() {
   } catch(e) {
     toast('Erro ao carregar piloto', 'error');
   }
+}
+
+function _atualizarUICTA(ativo) {
+  const track  = document.getElementById('cta-toggle-track');
+  const label  = document.getElementById('cta-toggle-label');
+  const fields = document.getElementById('cta-fields');
+  if (ativo) {
+    track.classList.add('on');
+    label.textContent = 'Ativado';
+    fields.style.display = '';
+  } else {
+    track.classList.remove('on');
+    label.textContent = 'Desativado';
+    fields.style.display = 'none';
+  }
+}
+
+function pilotoCTAToggle() {
+  const track = document.getElementById('cta-toggle-track');
+  _atualizarUICTA(!track.classList.contains('on'));
 }
 
 function _atualizarUIPiloto(ativo) {
@@ -2031,8 +2080,14 @@ async function pilotoSalvar() {
       piloto_imagem:    document.getElementById('piloto-imagem').value,
       piloto_h_inicio:  document.getElementById('piloto-h-inicio').value,
       piloto_h_fim:     document.getElementById('piloto-h-fim').value,
+      piloto_cta_ativo: document.getElementById('cta-toggle-track').classList.contains('on') ? 'true' : 'false',
+      piloto_cta_botao: document.getElementById('piloto-cta-botao').value.trim(),
+      piloto_cta_url:   document.getElementById('piloto-cta-url').value.trim(),
     };
     if (!body.piloto_topico) { toast('Informe o tópico do canal', 'error'); return; }
+    if (body.piloto_cta_ativo === 'true' && (!body.piloto_cta_botao || !body.piloto_cta_url)) {
+      toast('Preencha o texto e a URL do botão CTA', 'error'); return;
+    }
     await authFetch('/piloto', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
