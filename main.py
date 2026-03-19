@@ -98,27 +98,32 @@ async def job_keepalive():
 
 
 async def auto_registrar_webhook():
-    """Registra o webhook automaticamente na inicialização."""
+    """Registra o webhook para cada usuário que tem bot token configurado."""
     if not _app_url:
-        print("[WEBHOOK AUTO] RAILWAY_PUBLIC_DOMAIN não definido, pulando auto-registro")
+        print("[WEBHOOK AUTO] RAILWAY_PUBLIC_DOMAIN não definido, pulando")
         return
+    webhook_url = f"{_app_url}/telegram/webhook"
+    allowed = ["channel_post", "message_reaction", "message_reaction_count", "chat_member"]
     try:
-        webhook_url = f"{_app_url}/telegram/webhook"
-        token = get_bot_token()
-        if not token:
-            return
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"https://api.telegram.org/bot{token}/setWebhook",
-                json={"url": webhook_url, "allowed_updates": [
-                    "channel_post", "message_reaction",
-                    "message_reaction_count", "chat_member"
-                ]},
-            )
-        result = resp.json()
-        print(f"[WEBHOOK AUTO] {result}")
+        # Busca todos os tokens configurados por usuários
+        rows = db.table("configuracoes").select("user_id,valor").eq("chave", "TELEGRAM_BOT_TOKEN").execute()
+        tokens_vistos = set()
+        for row in (rows.data or []):
+            token = row.get("valor", "").strip()
+            if not token or token in tokens_vistos:
+                continue
+            tokens_vistos.add(token)
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.post(
+                        f"https://api.telegram.org/bot{token}/setWebhook",
+                        json={"url": webhook_url, "allowed_updates": allowed},
+                    )
+                print(f"[WEBHOOK AUTO] uid={row['user_id']} → {resp.json().get('description','ok')}")
+            except Exception as e:
+                print(f"[WEBHOOK AUTO ERRO] uid={row['user_id']}: {e}")
     except Exception as e:
-        print(f"[WEBHOOK AUTO ERRO] {e}")
+        print(f"[WEBHOOK AUTO ERRO GERAL] {e}")
 
 
 @asynccontextmanager
@@ -399,14 +404,18 @@ async def telegram_webhook(request: Request):
 # ── Setup webhook ─────────────────────────────────────────────────
 @app.get("/telegram/setup")
 async def telegram_setup(request: Request):
+    uid = require_user(request)
+    token = get_bot_token(uid)
+    if not token:
+        raise HTTPException(status_code=400, detail="Bot Token não configurado")
     webhook_url = str(request.base_url).rstrip("/").replace("http://", "https://") + "/telegram/webhook"
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"https://api.telegram.org/bot{get_bot_token()}/setWebhook",
+            f"https://api.telegram.org/bot{token}/setWebhook",
             json={"url": webhook_url, "allowed_updates": ["channel_post", "message_reaction", "message_reaction_count", "chat_member"]},
         )
     result = resp.json()
-    print(f"[WEBHOOK SETUP] {result}")
+    print(f"[WEBHOOK SETUP] uid={uid} {result}")
     return result
 
 
