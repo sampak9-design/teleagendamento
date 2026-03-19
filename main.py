@@ -277,22 +277,38 @@ async def telegram_webhook(request: Request):
         except Exception as e:
             print(f"[CANAL POST ERRO] {e}")
 
-    # Reação em post do canal
+    # Reação individual (grupos/usuários não-anônimos)
     reaction = update.get("message_reaction")
     if reaction:
         message_id = reaction.get("message_id")
-        chat_id = str(reaction.get("chat", {}).get("id", ""))
-        new_reactions = reaction.get("new_reaction", [])
-        # Conta total de reações acumuladas
-        total = len(new_reactions)
+        chat_id    = str(reaction.get("chat", {}).get("id", ""))
+        new_r = reaction.get("new_reaction", [])
+        old_r = reaction.get("old_reaction", [])
+        delta = len(new_r) - len(old_r)  # pode ser +1, -1 ou 0
+        if delta != 0:
+            try:
+                existing = db.table("canal_posts").select("id,reacoes").eq("message_id", str(message_id)).eq("chat_id", chat_id).execute()
+                if existing.data:
+                    novo = max(0, (existing.data[0].get("reacoes") or 0) + delta)
+                    db.table("canal_posts").update({"reacoes": novo}).eq("message_id", str(message_id)).eq("chat_id", chat_id).execute()
+                    print(f"[REAÇÃO] msg={message_id} delta={delta} novo={novo}")
+            except Exception as e:
+                print(f"[REAÇÃO ERRO] {e}")
+
+    # Contagem de reações de canal (anônimas — evento principal em canais públicos)
+    reaction_count = update.get("message_reaction_count")
+    if reaction_count:
+        message_id = reaction_count.get("message_id")
+        chat_id    = str(reaction_count.get("chat", {}).get("id", ""))
+        reactions  = reaction_count.get("reactions", [])
+        total      = sum(r.get("total_count", 0) for r in reactions)
         try:
-            existing = db.table("canal_posts").select("id,reacoes").eq("message_id", message_id).eq("chat_id", chat_id).execute()
+            existing = db.table("canal_posts").select("id").eq("message_id", str(message_id)).eq("chat_id", chat_id).execute()
             if existing.data:
-                atual = existing.data[0].get("reacoes") or 0
-                db.table("canal_posts").update({"reacoes": atual + total}).eq("message_id", message_id).eq("chat_id", chat_id).execute()
-                print(f"[REAÇÃO] msg={message_id} total={atual + total}")
+                db.table("canal_posts").update({"reacoes": total}).eq("message_id", str(message_id)).eq("chat_id", chat_id).execute()
+                print(f"[REAÇÃO COUNT] msg={message_id} total={total}")
         except Exception as e:
-            print(f"[REAÇÃO ERRO] {e}")
+            print(f"[REAÇÃO COUNT ERRO] {e}")
 
     # Membro saiu do canal
     chat_member = update.get("chat_member")
@@ -327,7 +343,7 @@ async def telegram_setup(request: Request):
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"https://api.telegram.org/bot{get_bot_token()}/setWebhook",
-            json={"url": webhook_url, "allowed_updates": ["channel_post", "message_reaction", "chat_member"]},
+            json={"url": webhook_url, "allowed_updates": ["channel_post", "message_reaction", "message_reaction_count", "chat_member"]},
         )
     result = resp.json()
     print(f"[WEBHOOK SETUP] {result}")
