@@ -416,6 +416,7 @@
               <option value="video">🎬 Vídeo</option>
               <option value="audio">🎵 Áudio</option>
               <option value="document">📎 Documento</option>
+              <option value="video_note">⚫ Vídeo Circular (bolinha)</option>
             </select>
           </div>
 
@@ -432,6 +433,12 @@
           <div class="form-group" id="grupo-arquivo" style="display:none;">
             <label>URL do Arquivo</label>
             <input id="np-arquivo-url" type="url" placeholder="https://...">
+          </div>
+
+          <div class="form-group" id="grupo-video-note" style="display:none;">
+            <label>Vídeo Circular (.mp4, quadrado, máx 1 min)</label>
+            <input id="np-video-note-file" type="file" accept="video/mp4,video/*" class="form-control" style="padding:6px;">
+            <div id="np-video-note-status" style="font-size:.78rem;color:#6b7280;margin-top:4px;"></div>
           </div>
 
           <div class="form-group">
@@ -1332,8 +1339,18 @@ async function removerPost(id) {
 // ── Novo Post ──────────────────────────────────────────────────────
 function toggleArquivoUrl() {
   const tipo = document.getElementById('np-tipo').value;
-  const g = document.getElementById('grupo-arquivo');
-  g.style.display = tipo !== 'text' ? '' : 'none';
+  const gArquivo    = document.getElementById('grupo-arquivo');
+  const gVideoNote  = document.getElementById('grupo-video-note');
+  if (tipo === 'text') {
+    gArquivo.style.display   = 'none';
+    gVideoNote.style.display = 'none';
+  } else if (tipo === 'video_note') {
+    gArquivo.style.display   = 'none';
+    gVideoNote.style.display = '';
+  } else {
+    gArquivo.style.display   = '';
+    gVideoNote.style.display = 'none';
+  }
 }
 
 function limparForm() {
@@ -1354,7 +1371,7 @@ async function criarPost() {
   const chatId = document.getElementById('np-chat-id').value.trim();
   const dtLocal = document.getElementById('np-datetime').value;
 
-  if (!texto) { toast('Digite o texto do post', 'error'); return; }
+  if (!texto && tipo !== 'video_note') { toast('Digite o texto do post', 'error'); return; }
   if (!dtLocal) { toast('Selecione a data e hora', 'error'); return; }
 
   // Converte datetime-local para ISO (UTC)
@@ -1364,11 +1381,36 @@ async function criarPost() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Agendando...';
 
+  // Upload de video_note primeiro
+  let fileId = arquivoUrl;
+  if (tipo === 'video_note') {
+    const fileInput = document.getElementById('np-video-note-file');
+    if (!fileInput.files[0]) { toast('Selecione o arquivo de vídeo', 'error'); btn.disabled=false; btn.innerHTML='Agendar Post'; return; }
+    const status = document.getElementById('np-video-note-status');
+    status.textContent = '⏳ Enviando vídeo para o Telegram...';
+    try {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      const s = await supa.auth.getSession();
+      const upResp = await fetch('/upload/video-note', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + s.data.session.access_token },
+        body: fd
+      });
+      const upData = await upResp.json();
+      if (!upResp.ok) { toast('Erro no upload: ' + (upData.detail || 'falha'), 'error'); btn.disabled=false; btn.innerHTML='Agendar Post'; return; }
+      fileId = upData.file_id;
+      status.textContent = '✓ Vídeo processado';
+    } catch(e) {
+      toast('Erro no upload do vídeo', 'error'); btn.disabled=false; btn.innerHTML='Agendar Post'; return;
+    }
+  }
+
   try {
     const r = await authFetch('/posts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({texto, tipo, recorrencia, arquivo_url: arquivoUrl||null, chat_id: chatId||null, agendado_para: dtISO}),
+      body: JSON.stringify({texto: texto||'', tipo, recorrencia, arquivo_url: fileId||null, chat_id: chatId||null, agendado_para: dtISO}),
     });
     const d = await r.json();
     if (r.ok) {

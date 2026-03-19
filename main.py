@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -167,6 +167,43 @@ def root():
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+@app.post("/upload/video-note")
+async def upload_video_note(request: Request, file: UploadFile = File(...)):
+    """Faz upload de um video note: envia ao Telegram, extrai file_id, apaga a mensagem."""
+    uid     = require_user(request)
+    token   = get_bot_token(uid)
+    chat_id = get_chat_id(uid)
+    if not token or not chat_id:
+        raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
+
+    conteudo = await file.read()
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{token}/sendVideoNote",
+            data={"chat_id": chat_id},
+            files={"video_note": (file.filename, conteudo, file.content_type or "video/mp4")},
+        )
+    data = resp.json()
+    if not data.get("ok"):
+        raise HTTPException(status_code=400, detail=data.get("description", "Erro ao enviar vídeo"))
+
+    msg        = data["result"]
+    file_id    = msg["video_note"]["file_id"]
+    message_id = msg["message_id"]
+
+    # Apaga a mensagem de teste do canal
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{token}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+            )
+    except Exception:
+        pass
+
+    return {"file_id": file_id, "filename": file.filename}
+
+
 # ── Telegram ──────────────────────────────────────────────────────
 async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
                           arquivo_url: str = None, cta_botao: str = None, cta_url: str = None,
@@ -195,6 +232,10 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
             payload = {"chat_id": chat_id, "document": arquivo_url, "caption": texto, "parse_mode": "HTML"}
             if markup: payload["reply_markup"] = markup
             resp = await client.post(f"{base}/sendDocument", json=payload)
+        elif tipo == "video_note" and arquivo_url:
+            # Video circular — file_id salvo após primeiro upload
+            payload = {"chat_id": chat_id, "video_note": arquivo_url}
+            resp = await client.post(f"{base}/sendVideoNote", json=payload)
         else:
             payload = {"chat_id": chat_id, "text": texto, "parse_mode": "HTML"}
             if markup: payload["reply_markup"] = markup
