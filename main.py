@@ -201,16 +201,11 @@ async def get_config(request: Request):
 async def listar_configuracoes(request: Request):
     uid = require_user(request)
     chaves = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-    env_map = {
-        "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN,
-        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
-        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
-        "OPENAI_API_KEY": OPENAI_API_KEY,
-    }
     resultado = {}
     for chave in chaves:
-        val = get_cfg(chave, "", uid) or env_map.get(chave, "")
-        if len(val) > 12 and chave != "TELEGRAM_CHAT_ID":
+        # Mostra APENAS o que o usuário salvou, sem fallback para env vars
+        val = get_cfg(chave, "", uid)
+        if val and len(val) > 12 and chave != "TELEGRAM_CHAT_ID":
             val_display = val[:6] + "..." + val[-4:]
         else:
             val_display = val
