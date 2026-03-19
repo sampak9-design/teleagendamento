@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TeleScheduler</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -275,6 +276,10 @@
     <div class="nav-item" onclick="navegar('analise', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       Análise do Canal
+    </div>
+    <div class="nav-item" onclick="navegar('relatorios', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Relatórios
     </div>
   </div>
 
@@ -741,6 +746,79 @@
       </div>
     </div>
 
+    <!-- ═══════════════ RELATÓRIOS ═══════════════ -->
+    <div class="section" id="section-relatorios">
+
+      <!-- Cards de resumo -->
+      <div class="cards-grid" style="margin-bottom:20px;">
+        <div class="card card-accent">
+          <div class="card-label">Posts no Canal</div>
+          <div class="card-value" id="rel-total-posts">—</div>
+          <div class="card-sub">Capturados pelo webhook</div>
+        </div>
+        <div class="card card-purple">
+          <div class="card-label">Total de Reações</div>
+          <div class="card-value" id="rel-total-reacoes">—</div>
+          <div class="card-sub">Em todos os posts</div>
+        </div>
+        <div class="card card-yellow">
+          <div class="card-label">Saídas do Canal</div>
+          <div class="card-value" id="rel-total-saidas">—</div>
+          <div class="card-sub">Membros que saíram</div>
+        </div>
+        <div class="card card-green">
+          <div class="card-label">Taxa de Engajamento</div>
+          <div class="card-value" id="rel-taxa-eng">—</div>
+          <div class="card-sub">Reações / Posts</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <!-- Gráfico: Posts por dia -->
+        <div class="panel">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Publicações por Dia
+          </div>
+          <canvas id="chart-posts-dia" height="180"></canvas>
+        </div>
+
+        <!-- Gráfico: Reações por dia -->
+        <div class="panel">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/></svg>
+            Reações por Dia
+          </div>
+          <canvas id="chart-reacoes-dia" height="180"></canvas>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <!-- Gráfico: Saídas por dia -->
+        <div class="panel">
+          <div class="panel-title" style="color:#ef4444;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/></svg>
+            Saídas por Dia
+          </div>
+          <canvas id="chart-saidas-dia" height="180"></canvas>
+        </div>
+
+        <!-- Gráfico: Top posts engajados -->
+        <div class="panel">
+          <div class="panel-title" style="color:#f59e0b;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Posts Mais Engajados
+          </div>
+          <canvas id="chart-top-posts" height="180"></canvas>
+        </div>
+      </div>
+
+      <div id="rel-empty" class="empty" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        <p>Nenhum dado ainda — publique posts no canal e registre o webhook</p>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -854,10 +932,12 @@ function navegar(id, el) {
     'agendados': 'Posts Agendados',
     'ia-criativa': 'IA Criativa',
     'analise': 'Análise do Canal',
+    'relatorios': 'Relatórios',
     'configuracoes': 'Configurações',
   };
   document.getElementById('topbar-title').textContent = titulos[id] || id;
 
+  if (id === 'relatorios') carregarRelatorios();
   if (id === 'agendados') carregarPosts();
   if (id === 'dashboard') carregarStats();
   if (id === 'configuracoes') carregarConfiguracoes();
@@ -1414,6 +1494,103 @@ async function registrarWebhook() {
     }
   } catch(e) {
     toast('Erro de conexão', 'error');
+  }
+}
+
+// ── Relatórios ─────────────────────────────────────────────────────
+const chartInstances = {};
+
+function criarOuAtualizar(id, config) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  chartInstances[id] = new Chart(ctx, config);
+}
+
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1e223560' } },
+    y: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1e223560' }, beginAtZero: true },
+  },
+};
+
+async function carregarRelatorios() {
+  try {
+    const r = await authFetch('/analytics');
+    const d = await r.json();
+    if (!r.ok) { toast('Erro ao carregar relatórios', 'error'); return; }
+
+    // Cards de resumo
+    document.getElementById('rel-total-posts').textContent = d.total_posts ?? 0;
+    document.getElementById('rel-total-reacoes').textContent = d.total_reacoes ?? 0;
+    document.getElementById('rel-total-saidas').textContent = d.total_saidas ?? 0;
+    const taxa = d.total_posts > 0 ? (d.total_reacoes / d.total_posts).toFixed(1) : '0';
+    document.getElementById('rel-taxa-eng').textContent = taxa;
+
+    const diasPosts   = Object.keys(d.posts_por_dia || {});
+    const diasReacoes = Object.keys(d.reacoes_por_dia || {});
+    const diasSaidas  = Object.keys(d.saidas_por_dia || {});
+
+    const fmt = dia => dia.slice(5); // "MM-DD"
+
+    // Gráfico: Posts por dia
+    criarOuAtualizar('chart-posts-dia', {
+      type: 'bar',
+      data: {
+        labels: diasPosts.map(fmt),
+        datasets: [{ data: Object.values(d.posts_por_dia || {}), backgroundColor: '#4f6ef7aa', borderColor: '#4f6ef7', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: { ...chartDefaults, plugins: { legend: { display: false } } },
+    });
+
+    // Gráfico: Reações por dia
+    criarOuAtualizar('chart-reacoes-dia', {
+      type: 'line',
+      data: {
+        labels: diasReacoes.map(fmt),
+        datasets: [{ data: Object.values(d.reacoes_por_dia || {}), borderColor: '#a855f7', backgroundColor: '#a855f720', fill: true, tension: 0.4, pointRadius: 3 }]
+      },
+      options: { ...chartDefaults },
+    });
+
+    // Gráfico: Saídas por dia
+    criarOuAtualizar('chart-saidas-dia', {
+      type: 'bar',
+      data: {
+        labels: diasSaidas.map(fmt),
+        datasets: [{ data: Object.values(d.saidas_por_dia || {}), backgroundColor: '#ef4444aa', borderColor: '#ef4444', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: { ...chartDefaults },
+    });
+
+    // Gráfico: Top posts (horizontal bar)
+    const topPosts = (d.top_posts || []).filter(p => p.reacoes > 0);
+    criarOuAtualizar('chart-top-posts', {
+      type: 'bar',
+      data: {
+        labels: topPosts.map(p => p.texto.substring(0, 30) + (p.texto.length > 30 ? '…' : '')),
+        datasets: [{ data: topPosts.map(p => p.reacoes), backgroundColor: '#f59e0baa', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: {
+        ...chartDefaults,
+        indexAxis: 'y',
+        scales: {
+          x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#1e223560' }, beginAtZero: true },
+          y: { ticks: { color: '#c9d1e0', font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+
+    if (!diasPosts.length && !diasSaidas.length) {
+      document.getElementById('rel-empty').style.display = '';
+    } else {
+      document.getElementById('rel-empty').style.display = 'none';
+    }
+  } catch(e) {
+    toast('Erro ao carregar relatórios', 'error');
   }
 }
 

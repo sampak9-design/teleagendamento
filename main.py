@@ -581,5 +581,43 @@ Retorne APENAS o JSON válido, sem markdown, sem explicações."""
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Relatórios / Analytics ────────────────────────────────────────
+@app.get("/analytics")
+async def get_analytics(request: Request):
+    uid = require_user(request)
+    try:
+        from collections import defaultdict
+
+        saidas = db.table("canal_saidas").select("data").eq("user_id", uid).limit(1000).execute().data or []
+        saidas_por_dia = defaultdict(int)
+        for s in saidas:
+            dia = (s.get("data") or "")[:10]
+            if dia:
+                saidas_por_dia[dia] += 1
+
+        canal_posts = db.table("canal_posts").select("*").eq("user_id", uid).order("data", desc=False).limit(1000).execute().data or []
+        posts_por_dia = defaultdict(int)
+        reacoes_por_dia = defaultdict(int)
+        for p in canal_posts:
+            dia = (p.get("data") or "")[:10]
+            if dia:
+                posts_por_dia[dia] += 1
+                reacoes_por_dia[dia] += p.get("reacoes") or 0
+
+        top_posts = sorted(canal_posts, key=lambda x: x.get("reacoes") or 0, reverse=True)[:10]
+
+        return {
+            "saidas_por_dia":   dict(sorted(saidas_por_dia.items())),
+            "posts_por_dia":    dict(sorted(posts_por_dia.items())),
+            "reacoes_por_dia":  dict(sorted(reacoes_por_dia.items())),
+            "top_posts":        [{"texto": (p.get("texto") or "")[:60], "reacoes": p.get("reacoes") or 0} for p in top_posts],
+            "total_saidas":     len(saidas),
+            "total_posts":      len(canal_posts),
+            "total_reacoes":    sum(p.get("reacoes") or 0 for p in canal_posts),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
