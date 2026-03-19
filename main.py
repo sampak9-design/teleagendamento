@@ -508,7 +508,7 @@ async def ia_gerar_imagem(request: Request):
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
     try:
-        prompt_final = prompt + ". No text, no words, no letters, no watermarks in the image."
+        prompt_final = prompt + ". Any text or writing in the image must be in Brazilian Portuguese only."
         kwargs = {"model": model, "prompt": prompt_final, "size": size, "n": 1}
         if model == "dall-e-3":
             kwargs["quality"] = quality
@@ -870,7 +870,7 @@ Retorne APENAS o texto do post, sem explicações."""
             if oai_client:
                 img_resp = oai_client.images.generate(
                     model="dall-e-3",
-                    prompt=f"{topico}: {texto[:200]}. No text, no words, no letters, no watermarks in the image.",
+                    prompt=f"{topico}: {texto[:200]}. Any text or writing in the image must be in Brazilian Portuguese only.",
                     size="1024x1024", quality="standard", n=1
                 )
                 post_data["arquivo_url"] = img_resp.data[0].url
