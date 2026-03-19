@@ -92,6 +92,9 @@ async def lifespan(_app: FastAPI):
 
 app       = FastAPI(lifespan=lifespan)
 
+# buffer em memória dos últimos webhooks recebidos
+_webhook_log: list = []
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -254,6 +257,11 @@ async def salvar_configuracoes(request: Request):
 async def telegram_webhook(request: Request):
     update = await request.json()
 
+    # Guarda últimos 20 updates em memória para debug
+    _webhook_log.insert(0, {"ts": datetime.utcnow().isoformat(), "keys": list(update.keys()), "raw": update})
+    if len(_webhook_log) > 20:
+        _webhook_log.pop()
+
     # Post publicado no canal
     post = update.get("channel_post")
     if post:
@@ -348,6 +356,12 @@ async def telegram_setup(request: Request):
     result = resp.json()
     print(f"[WEBHOOK SETUP] {result}")
     return result
+
+
+@app.get("/debug/webhook-log")
+async def debug_webhook_log(request: Request):
+    require_user(request)
+    return {"total": len(_webhook_log), "updates": _webhook_log[:10]}
 
 
 @app.get("/debug/reacoes")
