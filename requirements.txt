@@ -3,6 +3,7 @@ uvicorn[standard]
 supabase
 httpx
 anthropic
+openai
 apscheduler
 python-dotenv
 python-multipart

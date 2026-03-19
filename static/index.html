@@ -445,29 +445,55 @@
             </div>
 
             <div class="form-group" style="margin-bottom:14px;">
+              <label>Motor de IA</label>
+              <div class="tons-grid" id="motor-grid">
+                <button class="ton-btn ativo" onclick="selecionarMotor(this,'pollinations')">🆓 Pollinations (Grátis)</button>
+                <button class="ton-btn" onclick="selecionarMotor(this,'dalle')">✨ DALL-E 3 (OpenAI)</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
               <label>Descrição da Arte</label>
               <textarea id="img-prompt" placeholder="Ex: arte minimalista de marketing digital, cores azul e roxo, estilo profissional, fundo escuro..." style="min-height:80px;"></textarea>
             </div>
 
-            <div class="form-group" style="margin-bottom:14px;">
-              <label>Estilo</label>
-              <div class="tons-grid" id="estilos-grid">
-                <button class="ton-btn ativo" onclick="selecionarEstilo(this,'flux')">Padrão</button>
-                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-realism')">Realista</button>
-                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-anime')">Anime</button>
-                <button class="ton-btn" onclick="selecionarEstilo(this,'flux-3d')">3D</button>
-                <button class="ton-btn" onclick="selecionarEstilo(this,'any-dark')">Dark Art</button>
-                <button class="ton-btn" onclick="selecionarEstilo(this,'turbo')">Turbo</button>
+            <!-- Opções Pollinations -->
+            <div id="opcoes-pollinations">
+              <div class="form-group" style="margin-bottom:14px;">
+                <label>Estilo</label>
+                <div class="tons-grid" id="estilos-grid">
+                  <button class="ton-btn ativo" onclick="selecionarEstilo(this,'flux')">Padrão</button>
+                  <button class="ton-btn" onclick="selecionarEstilo(this,'flux-realism')">Realista</button>
+                  <button class="ton-btn" onclick="selecionarEstilo(this,'flux-anime')">Anime</button>
+                  <button class="ton-btn" onclick="selecionarEstilo(this,'flux-3d')">3D</button>
+                  <button class="ton-btn" onclick="selecionarEstilo(this,'any-dark')">Dark Art</button>
+                  <button class="ton-btn" onclick="selecionarEstilo(this,'turbo')">Turbo</button>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom:16px;">
+                <label>Proporção</label>
+                <div class="tons-grid" id="proporcao-grid">
+                  <button class="ton-btn ativo" onclick="selecionarProporcao(this,'1080','1080')">Quadrado 1:1</button>
+                  <button class="ton-btn" onclick="selecionarProporcao(this,'1280','720')">Paisagem 16:9</button>
+                  <button class="ton-btn" onclick="selecionarProporcao(this,'720','1280')">Retrato 9:16</button>
+                  <button class="ton-btn" onclick="selecionarProporcao(this,'1200','628')">Banner</button>
+                </div>
               </div>
             </div>
 
-            <div class="form-group" style="margin-bottom:16px;">
-              <label>Proporção</label>
-              <div class="tons-grid" id="proporcao-grid">
-                <button class="ton-btn ativo" onclick="selecionarProporcao(this,'1080','1080')">Quadrado 1:1</button>
-                <button class="ton-btn" onclick="selecionarProporcao(this,'1280','720')">Paisagem 16:9</button>
-                <button class="ton-btn" onclick="selecionarProporcao(this,'720','1280')">Retrato 9:16</button>
-                <button class="ton-btn" onclick="selecionarProporcao(this,'1200','628')">Banner</button>
+            <!-- Opções DALL-E -->
+            <div id="opcoes-dalle" style="display:none;">
+              <div class="form-group" style="margin-bottom:16px;">
+                <label>Tamanho</label>
+                <div class="tons-grid" id="dalle-size-grid">
+                  <button class="ton-btn ativo" onclick="selecionarDalleSize(this,'1024x1024')">Quadrado 1:1</button>
+                  <button class="ton-btn" onclick="selecionarDalleSize(this,'1792x1024')">Paisagem 16:9</button>
+                  <button class="ton-btn" onclick="selecionarDalleSize(this,'1024x1792')">Retrato 9:16</button>
+                </div>
+              </div>
+              <div style="background:#1a1d2e;border:1px solid #2d3148;border-radius:7px;padding:10px 12px;font-size:0.75rem;color:#6b7280;margin-bottom:16px;">
+                ⚡ DALL-E 3 usa créditos da OpenAI (~$0,04/imagem). Certifique-se de ter OPENAI_API_KEY configurada no Railway.
               </div>
             </div>
 
@@ -826,6 +852,22 @@ function trocarAbaIA(el, abaId) {
 let estiloSelecionado = 'flux';
 let imgWidth = '1080';
 let imgHeight = '1080';
+let motorSelecionado = 'pollinations';
+let dalleSizeSelecionado = '1024x1024';
+
+function selecionarMotor(el, motor) {
+  document.querySelectorAll('#motor-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  motorSelecionado = motor;
+  document.getElementById('opcoes-pollinations').style.display = motor === 'pollinations' ? '' : 'none';
+  document.getElementById('opcoes-dalle').style.display = motor === 'dalle' ? '' : 'none';
+}
+
+function selecionarDalleSize(el, size) {
+  document.querySelectorAll('#dalle-size-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  dalleSizeSelecionado = size;
+}
 
 function selecionarEstilo(el, estilo) {
   document.querySelectorAll('#estilos-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
@@ -859,36 +901,60 @@ async function gerarImagem() {
   document.getElementById('btn-baixar').style.display = 'none';
   document.getElementById('btn-usar-img').style.display = 'none';
 
-  const seed = Math.floor(Math.random() * 999999);
-  const encodedPrompt = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${imgWidth}&height=${imgHeight}&model=${estiloSelecionado}&nologo=true&seed=${seed}`;
+  const btnLabel = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Gerar Imagem';
 
-  const img = new Image();
-  img.onload = () => {
-    container.innerHTML = '';
-    img.style.cssText = 'width:100%;height:auto;border-radius:6px;display:block;max-height:400px;object-fit:contain;';
-    container.appendChild(img);
+  function mostrarImagem(url) {
+    const img = new Image();
+    img.onload = () => {
+      container.innerHTML = '';
+      img.style.cssText = 'width:100%;height:auto;border-radius:6px;display:block;max-height:400px;object-fit:contain;';
+      container.appendChild(img);
+      document.getElementById('img-url-val').value = url;
+      document.getElementById('img-url-display').style.display = 'block';
+      document.getElementById('btn-baixar').href = url;
+      document.getElementById('btn-baixar').style.display = '';
+      document.getElementById('btn-usar-img').style.display = '';
+      btn.disabled = false;
+      btn.innerHTML = btnLabel;
+      toast('Arte gerada!', 'success');
+    };
+    img.onerror = () => {
+      container.innerHTML = '<div style="text-align:center;color:#ef4444;padding:40px;"><p style="font-size:0.8rem;">Erro ao exibir imagem. Tente novamente.</p></div>';
+      btn.disabled = false;
+      btn.innerHTML = btnLabel;
+      toast('Erro ao gerar imagem', 'error');
+    };
+    img.src = url;
+  }
 
-    document.getElementById('img-url-val').value = url;
-    document.getElementById('img-url-display').style.display = 'block';
-
-    const btnBaixar = document.getElementById('btn-baixar');
-    btnBaixar.href = url;
-    btnBaixar.style.display = '';
-
-    document.getElementById('btn-usar-img').style.display = '';
-
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Gerar Imagem';
-    toast('Arte gerada!', 'success');
-  };
-  img.onerror = () => {
-    container.innerHTML = '<div style="text-align:center;color:#ef4444;padding:40px;"><p style="font-size:0.8rem;">Erro ao gerar imagem. Tente novamente.</p></div>';
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Gerar Imagem';
-    toast('Erro ao gerar imagem', 'error');
-  };
-  img.src = url;
+  if (motorSelecionado === 'dalle') {
+    try {
+      const r = await fetch('/ia/gerar-imagem', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt, size: dalleSizeSelecionado}),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        container.innerHTML = '<div style="text-align:center;color:#ef4444;padding:40px;"><p style="font-size:0.8rem;">Erro: ' + (d.detail || 'Falha ao gerar') + '</p></div>';
+        btn.disabled = false;
+        btn.innerHTML = btnLabel;
+        toast('Erro: ' + (d.detail || 'Falha'), 'error');
+        return;
+      }
+      mostrarImagem(d.url);
+    } catch (e) {
+      container.innerHTML = '<div style="text-align:center;color:#ef4444;padding:40px;"><p style="font-size:0.8rem;">Erro de conexão</p></div>';
+      btn.disabled = false;
+      btn.innerHTML = btnLabel;
+      toast('Erro de conexão', 'error');
+    }
+  } else {
+    const seed = Math.floor(Math.random() * 999999);
+    const encodedPrompt = encodeURIComponent(prompt);
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${imgWidth}&height=${imgHeight}&model=${estiloSelecionado}&nologo=true&seed=${seed}`;
+    mostrarImagem(url);
+  }
 }
 
 function usarImagemGerada() {

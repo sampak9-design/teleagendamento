@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from supabase import create_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import anthropic
+import openai
 import uvicorn
 import httpx
 import json
@@ -20,9 +21,11 @@ SUPABASE_KEY       = os.environ["SUPABASE_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 ANTHROPIC_API_KEY  = os.environ["ANTHROPIC_API_KEY"]
+OPENAI_API_KEY     = os.environ.get("OPENAI_API_KEY", "")
 
 db        = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai        = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+oai       = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
@@ -340,6 +343,31 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
             messages=[{"role": "user", "content": prompt}]
         )
         return {"texto": msg.content[0].text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── IA: Gerar imagem (DALL-E) ─────────────────────────────────────
+@app.post("/ia/gerar-imagem")
+async def ia_gerar_imagem(request: Request):
+    data   = await request.json()
+    prompt = data.get("prompt", "").strip()
+    size   = data.get("size", "1024x1024")  # 1024x1024, 1792x1024, 1024x1792
+
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt é obrigatório")
+    if not oai:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
+
+    try:
+        resp = oai.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size=size,
+            quality="standard",
+            n=1,
+        )
+        return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
