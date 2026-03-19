@@ -508,7 +508,8 @@ async def ia_gerar_imagem(request: Request):
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
     try:
-        kwargs = {"model": model, "prompt": prompt, "size": size, "n": 1}
+        prompt_final = prompt + ". No text, no words, no letters, no watermarks in the image."
+        kwargs = {"model": model, "prompt": prompt_final, "size": size, "n": 1}
         if model == "dall-e-3":
             kwargs["quality"] = quality
             kwargs["style"] = style
@@ -868,7 +869,8 @@ Retorne APENAS o texto do post, sem explicações."""
             oai_client = get_openai_client(uid)
             if oai_client:
                 img_resp = oai_client.images.generate(
-                    model="dall-e-3", prompt=f"{topico}: {texto[:200]}",
+                    model="dall-e-3",
+                    prompt=f"{topico}: {texto[:200]}. No text, no words, no letters, no watermarks in the image.",
                     size="1024x1024", quality="standard", n=1
                 )
                 post_data["arquivo_url"] = img_resp.data[0].url
