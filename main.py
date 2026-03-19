@@ -635,6 +635,31 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 
 
 # ── IA: Gerar imagem (DALL-E) ─────────────────────────────────────
+async def _enriquecer_prompt_imagem(prompt: str, uid: str) -> str:
+    """Usa Claude para transformar um prompt simples num prompt rico para DALL-E."""
+    try:
+        ai_client = get_anthropic_client(uid)
+        msg = ai_client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=400,
+            messages=[{"role": "user", "content": f"""You are an expert at writing prompts for DALL-E 3 image generation.
+Transform the following idea into a rich, detailed DALL-E prompt in English that will produce a stunning, high-quality image.
+
+Idea: {prompt}
+
+Rules:
+- Write in English (DALL-E works best with English prompts)
+- Be very descriptive: include style, lighting, composition, colors, mood
+- If the image should contain text/words, specify they must be in Brazilian Portuguese
+- Do NOT include any explanation — return ONLY the final prompt
+- Maximum 400 characters"""}]
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        # Se falhar, usa o prompt original com instrução de português
+        return prompt + ". Any text or writing in the image must be in Brazilian Portuguese only."
+
+
 @app.post("/ia/gerar-imagem")
 async def ia_gerar_imagem(request: Request):
     uid     = require_user(request)
@@ -652,13 +677,14 @@ async def ia_gerar_imagem(request: Request):
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
     try:
-        prompt_final = prompt + ". Any text or writing in the image must be in Brazilian Portuguese only."
-        kwargs = {"model": model, "prompt": prompt_final, "size": size, "n": 1}
+        # Usa Claude para enriquecer o prompt antes de enviar ao DALL-E
+        prompt_enriquecido = await _enriquecer_prompt_imagem(prompt, uid)
+        kwargs = {"model": model, "prompt": prompt_enriquecido, "size": size, "n": 1}
         if model == "dall-e-3":
             kwargs["quality"] = quality
             kwargs["style"] = style
         resp = cliente_oai.images.generate(**kwargs)
-        return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt}
+        return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt, "prompt_usado": prompt_enriquecido}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1014,9 +1040,9 @@ Retorne APENAS o texto do post, sem explicações."""
         try:
             oai_client = get_openai_client(uid)
             if oai_client:
+                prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
                 img_resp = oai_client.images.generate(
-                    model="dall-e-3",
-                    prompt=f"{topico}: {texto[:200]}. Any text or writing in the image must be in Brazilian Portuguese only.",
+                    model="dall-e-3", prompt=prompt_img,
                     size="1024x1024", quality="standard", n=1
                 )
                 post_data["arquivo_url"] = img_resp.data[0].url
