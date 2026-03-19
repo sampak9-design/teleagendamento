@@ -10,6 +10,7 @@ import openai
 import uvicorn
 import httpx
 import json
+import base64
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -28,29 +29,55 @@ ai        = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 oai       = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 scheduler = AsyncIOScheduler()
 
-# ── Config helpers ─────────────────────────────────────────────────
-def get_cfg(chave: str, default: str = "") -> str:
-    """Busca config do banco; fallback para variável de ambiente."""
+# ── Auth helpers ───────────────────────────────────────────────────
+def get_user_id(request: Request) -> str:
+    """Extrai o user_id (sub) do JWT Supabase no header Authorization."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return ""
     try:
-        r = db.table("configuracoes").select("valor").eq("chave", chave).execute()
+        token = auth[7:]
+        payload = token.split(".")[1]
+        payload += "=" * (4 - len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload))
+        return data.get("sub", "")
+    except Exception:
+        return ""
+
+def require_user(request: Request) -> str:
+    uid = get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    return uid
+
+# ── Config helpers ─────────────────────────────────────────────────
+def get_cfg(chave: str, default: str = "", user_id: str = "") -> str:
+    """Busca config do banco para o usuário; fallback para variável de ambiente."""
+    try:
+        q = db.table("configuracoes").select("valor").eq("chave", chave)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.eq("user_id", "")
+        r = q.execute()
         if r.data and r.data[0].get("valor"):
             return r.data[0]["valor"]
     except Exception:
         pass
     return default
 
-def get_bot_token() -> str:
-    return get_cfg("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN)
+def get_bot_token(user_id: str = "") -> str:
+    return get_cfg("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN, user_id)
 
-def get_chat_id() -> str:
-    return get_cfg("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)
+def get_chat_id(user_id: str = "") -> str:
+    return get_cfg("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID, user_id)
 
-def get_anthropic_client():
-    key = get_cfg("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)
+def get_anthropic_client(user_id: str = ""):
+    key = get_cfg("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY, user_id)
     return anthropic.Anthropic(api_key=key)
 
-def get_openai_client():
-    key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY)
+def get_openai_client(user_id: str = ""):
+    key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY, user_id)
     return openai.OpenAI(api_key=key) if key else None
 
 @asynccontextmanager
@@ -165,26 +192,24 @@ async def verificar_e_enviar_posts():
 
 # ── Config ────────────────────────────────────────────────────────
 @app.get("/config")
-def get_config():
-    return {"chat_id": get_chat_id()}
+async def get_config(request: Request):
+    uid = get_user_id(request)
+    return {"chat_id": get_chat_id(uid)}
 
 
 @app.get("/configuracoes")
-def listar_configuracoes():
+async def listar_configuracoes(request: Request):
+    uid = require_user(request)
     chaves = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+    env_map = {
+        "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN,
+        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
+        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
+        "OPENAI_API_KEY": OPENAI_API_KEY,
+    }
     resultado = {}
     for chave in chaves:
-        val = get_cfg(chave, "")
-        if not val:
-            # fallback para env, mascarado
-            env_map = {
-                "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN,
-                "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
-                "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
-                "OPENAI_API_KEY": OPENAI_API_KEY,
-            }
-            val = env_map.get(chave, "")
-        # Mascara chaves longas
+        val = get_cfg(chave, "", uid) or env_map.get(chave, "")
         if len(val) > 12 and chave != "TELEGRAM_CHAT_ID":
             val_display = val[:6] + "..." + val[-4:]
         else:
@@ -195,6 +220,7 @@ def listar_configuracoes():
 
 @app.post("/configuracoes")
 async def salvar_configuracoes(request: Request):
+    uid = require_user(request)
     data = await request.json()
     chaves_permitidas = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
     for chave, valor in data.items():
@@ -202,7 +228,10 @@ async def salvar_configuracoes(request: Request):
             continue
         if not valor or not valor.strip():
             continue
-        db.table("configuracoes").upsert({"chave": chave, "valor": valor.strip(), "updated_at": datetime.utcnow().isoformat()}).execute()
+        db.table("configuracoes").upsert({
+            "user_id": uid, "chave": chave, "valor": valor.strip(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).execute()
     return {"status": "ok"}
 
 
@@ -219,7 +248,11 @@ async def telegram_webhook(request: Request):
         message_id = post.get("message_id")
         data = datetime.utcfromtimestamp(post.get("date", 0)).isoformat()
         try:
+            # Descobre o user_id associado a esse chat_id nas configuracoes
+            cfg_r = db.table("configuracoes").select("user_id").eq("chave", "TELEGRAM_CHAT_ID").eq("valor", chat_id).execute()
+            uid_canal = cfg_r.data[0]["user_id"] if cfg_r.data else ""
             db.table("canal_posts").insert({
+                "user_id": uid_canal,
                 "message_id": message_id,
                 "chat_id": chat_id,
                 "texto": texto,
@@ -255,15 +288,18 @@ async def telegram_webhook(request: Request):
         saiu = old_status == "member" and new_status in ("left", "kicked")
         if saiu:
             chat_id = str(chat_member.get("chat", {}).get("id", ""))
-            user_id = chat_member.get("new_chat_member", {}).get("user", {}).get("id")
+            saida_user_id = chat_member.get("new_chat_member", {}).get("user", {}).get("id")
             data = datetime.utcnow().isoformat()
             try:
+                cfg_r = db.table("configuracoes").select("user_id").eq("chave", "TELEGRAM_CHAT_ID").eq("valor", chat_id).execute()
+                uid_canal = cfg_r.data[0]["user_id"] if cfg_r.data else ""
                 db.table("canal_saidas").insert({
+                    "user_id": uid_canal,
                     "chat_id": chat_id,
-                    "user_id": user_id,
+                    "saida_user_id": saida_user_id,
                     "data": data,
                 }).execute()
-                print(f"[SAÍDA] user={user_id}")
+                print(f"[SAÍDA] user={saida_user_id}")
             except Exception as e:
                 print(f"[SAÍDA ERRO] {e}")
 
@@ -286,20 +322,26 @@ async def telegram_setup(request: Request):
 
 # ── Canal posts ───────────────────────────────────────────────────
 @app.get("/canal/posts")
-def listar_canal_posts():
+async def listar_canal_posts(request: Request):
+    uid = get_user_id(request)
     try:
-        result = db.table("canal_posts").select("*").order("reacoes", desc=True).limit(50).execute()
+        q = db.table("canal_posts").select("*").order("reacoes", desc=True).limit(50)
+        if uid:
+            q = q.eq("user_id", uid)
+        result = q.execute()
         return {"posts": result.data or []}
-    except Exception as e:
+    except Exception:
         return {"posts": []}
 
 
 # ── Posts ─────────────────────────────────────────────────────────
 @app.get("/posts")
-def listar_posts():
+async def listar_posts(request: Request):
+    uid = require_user(request)
     try:
         result = (db.table("posts_agendados")
                     .select("*")
+                    .eq("user_id", uid)
                     .order("agendado_para", desc=False)
                     .execute())
         return {"posts": result.data or []}
@@ -310,16 +352,18 @@ def listar_posts():
 
 @app.post("/posts")
 async def criar_post(request: Request):
+    uid = require_user(request)
     data = await request.json()
     texto = data.get("texto", "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="texto é obrigatório")
 
     registro = {
+        "user_id":      uid,
         "texto":        texto,
         "tipo":         data.get("tipo", "text"),
         "arquivo_url":  data.get("arquivo_url") or None,
-        "chat_id":      data.get("chat_id") or TELEGRAM_CHAT_ID,
+        "chat_id":      data.get("chat_id") or get_chat_id(uid),
         "agendado_para": data.get("agendado_para"),
         "recorrencia":  data.get("recorrencia", "nenhuma"),
         "status":       "agendado",
@@ -334,9 +378,10 @@ async def criar_post(request: Request):
 
 
 @app.delete("/posts/{post_id}")
-def remover_post(post_id: int):
+async def remover_post(post_id: int, request: Request):
+    uid = require_user(request)
     try:
-        db.table("posts_agendados").delete().eq("id", post_id).execute()
+        db.table("posts_agendados").delete().eq("id", post_id).eq("user_id", uid).execute()
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -344,9 +389,13 @@ def remover_post(post_id: int):
 
 # ── Stats ─────────────────────────────────────────────────────────
 @app.get("/stats")
-def get_stats():
+async def get_stats(request: Request):
+    uid = get_user_id(request)
     try:
-        result = db.table("posts_agendados").select("*").execute()
+        q = db.table("posts_agendados").select("*")
+        if uid:
+            q = q.eq("user_id", uid)
+        result = q.execute()
         posts  = result.data or []
 
         enviados  = [p for p in posts if p.get("status") == "enviado"]
@@ -378,6 +427,7 @@ def get_stats():
 # ── IA: Gerar post ────────────────────────────────────────────────
 @app.post("/ia/gerar")
 async def ia_gerar(request: Request):
+    uid  = require_user(request)
     data = await request.json()
     tema = data.get("tema", "").strip()
     tom  = data.get("tom", "profissional")
@@ -399,7 +449,7 @@ Regras:
 Retorne APENAS o texto do post, sem explicações adicionais."""
 
     try:
-        cliente = get_anthropic_client()
+        cliente = get_anthropic_client(uid)
         msg = cliente.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=600,
@@ -413,16 +463,17 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 # ── IA: Gerar imagem (DALL-E) ─────────────────────────────────────
 @app.post("/ia/gerar-imagem")
 async def ia_gerar_imagem(request: Request):
+    uid     = require_user(request)
     data    = await request.json()
     prompt  = data.get("prompt", "").strip()
-    model   = data.get("model", "dall-e-3")     # dall-e-3 | dall-e-2
+    model   = data.get("model", "dall-e-3")
     size    = data.get("size", "1024x1024")
-    quality = data.get("quality", "standard")   # standard | hd (dall-e-3 only)
-    style   = data.get("style", "vivid")        # vivid | natural (dall-e-3 only)
+    quality = data.get("quality", "standard")
+    style   = data.get("style", "vivid")
 
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt é obrigatório")
-    cliente_oai = get_openai_client()
+    cliente_oai = get_openai_client(uid)
     if not cliente_oai:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
@@ -439,9 +490,10 @@ async def ia_gerar_imagem(request: Request):
 
 # ── IA: Análise do canal ──────────────────────────────────────────
 @app.get("/ia/analise")
-async def ia_analise():
+async def ia_analise(request: Request):
+    uid = require_user(request)
     try:
-        posts = db.table("posts_agendados").select("*").execute().data or []
+        posts = db.table("posts_agendados").select("*").eq("user_id", uid).execute().data or []
         total     = len(posts)
         enviados  = len([p for p in posts if p.get("status") == "enviado"])
         agendados = len([p for p in posts if p.get("status") == "agendado"])
@@ -452,7 +504,7 @@ async def ia_analise():
         ]) or "Nenhum post agendado ainda."
 
         # Posts reais do canal + reações
-        canal_posts = db.table("canal_posts").select("*").order("data", desc=True).limit(50).execute().data or []
+        canal_posts = db.table("canal_posts").select("*").eq("user_id", uid).order("data", desc=True).limit(50).execute().data or []
         top_reacoes = sorted(canal_posts, key=lambda x: x.get("reacoes") or 0, reverse=True)[:5]
         sem_reacao  = [p for p in canal_posts if (p.get("reacoes") or 0) == 0]
 
@@ -467,7 +519,7 @@ async def ia_analise():
         ]) or "Nenhum dado de reações ainda."
 
         # Saídas do canal
-        saidas = db.table("canal_saidas").select("*").order("data", desc=True).limit(100).execute().data or []
+        saidas = db.table("canal_saidas").select("*").eq("user_id", uid).order("data", desc=True).limit(100).execute().data or []
         total_saidas = len(saidas)
 
         # Correlação: saídas por dia vs posts por dia
@@ -517,7 +569,7 @@ Histórico recente de posts:
 
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
-        cliente = get_anthropic_client()
+        cliente = get_anthropic_client(uid)
         msg = cliente.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1000,

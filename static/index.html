@@ -829,6 +829,14 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Auth Fetch ─────────────────────────────────────────────────────
+async function authFetch(url, options = {}) {
+  const { data: { session } } = await supa.auth.getSession();
+  const token = session?.access_token || '';
+  options.headers = { ...(options.headers || {}), 'Authorization': 'Bearer ' + token };
+  return fetch(url, options);
+}
+
 // ── Estado ─────────────────────────────────────────────────────────
 let tomSelecionado = 'profissional';
 let posts = [];
@@ -867,7 +875,7 @@ function toast(msg, tipo = '') {
 // ── Stats / Dashboard ──────────────────────────────────────────────
 async function carregarStats() {
   try {
-    const r = await fetch('/stats');
+    const r = await authFetch('/stats');
     const d = await r.json();
 
     document.getElementById('stat-total').textContent = d.total ?? 0;
@@ -920,7 +928,7 @@ function tipoLabel(tipo) {
 // ── Posts Agendados ────────────────────────────────────────────────
 async function carregarPosts() {
   try {
-    const r = await fetch('/posts');
+    const r = await authFetch('/posts');
     const d = await r.json();
     posts = d.posts || [];
     renderPosts();
@@ -994,7 +1002,7 @@ function esc(str) {
 async function removerPost(id) {
   if (!confirm('Remover este post?')) return;
   try {
-    await fetch('/posts/' + id, {method:'DELETE'});
+    await authFetch('/posts/' + id, {method:'DELETE'});
     toast('Post removido', 'success');
     carregarPosts();
   } catch (e) {
@@ -1038,7 +1046,7 @@ async function criarPost() {
   btn.innerHTML = '<div class="spinner"></div> Agendando...';
 
   try {
-    const r = await fetch('/posts', {
+    const r = await authFetch('/posts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({texto, tipo, recorrencia, arquivo_url: arquivoUrl||null, chat_id: chatId||null, agendado_para: dtISO}),
@@ -1157,7 +1165,7 @@ async function gerarImagem() {
   }
 
   try {
-    const r = await fetch('/ia/gerar-imagem', {
+    const r = await authFetch('/ia/gerar-imagem', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({prompt, model: dalleModelSelecionado, size: dalleSizeSelecionado, quality: dalleQualitySelecionado, style: dalleStyleSelecionado}),
@@ -1215,7 +1223,7 @@ async function gerarPost() {
   btnUsar.style.display = 'none';
 
   try {
-    const r = await fetch('/ia/gerar', {
+    const r = await authFetch('/ia/gerar', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({tema, tom: tomSelecionado}),
@@ -1259,7 +1267,7 @@ async function rodarAnalise() {
   document.getElementById('analise-empty').style.display = '';
 
   try {
-    const r = await fetch('/ia/analise');
+    const r = await authFetch('/ia/analise');
     const d = await r.json();
 
     if (!r.ok) { toast('Erro: ' + d.detail, 'error'); return; }
@@ -1323,7 +1331,7 @@ async function rodarAnalise() {
 // ── Configurações ─────────────────────────────────────────────────
 async function carregarConfiguracoes() {
   try {
-    const r = await fetch('/configuracoes');
+    const r = await authFetch('/configuracoes');
     const d = await r.json();
     const map = {
       'TELEGRAM_BOT_TOKEN': 'cfg-bot-token',
@@ -1370,7 +1378,7 @@ async function salvarConfiguracoes() {
   }
 
   try {
-    const r = await fetch('/configuracoes', {
+    const r = await authFetch('/configuracoes', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
@@ -1381,7 +1389,7 @@ async function salvarConfiguracoes() {
       Object.keys(campos).forEach(id => document.getElementById(id).value = '');
       carregarConfiguracoes();
       // Atualiza chat_id no formulário de novo post
-      fetch('/config').then(r=>r.json()).then(d=>{
+      authFetch('/config').then(r=>r.json()).then(d=>{
         if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
       });
     } else {
@@ -1397,7 +1405,7 @@ async function salvarConfiguracoes() {
 
 async function registrarWebhook() {
   try {
-    const r = await fetch('/telegram/setup');
+    const r = await authFetch('/telegram/setup');
     const d = await r.json();
     if (d.result === true || d.ok) {
       toast('Webhook registrado!', 'success');
@@ -1418,7 +1426,7 @@ function atualizarRelogio() {
 // ── Status do Bot ──────────────────────────────────────────────────
 async function checarBot() {
   try {
-    const r = await fetch('/stats');
+    const r = await authFetch('/stats');
     const dot = document.getElementById('bot-dot');
     const sub = document.getElementById('bot-sub');
     if (r.ok) {
@@ -1435,7 +1443,7 @@ async function checarBot() {
 }
 
 // ── Init ────────────────────────────────────────────────────────────
-fetch('/config').then(r=>r.json()).then(d=>{
+authFetch('/config').then(r=>r.json()).then(d=>{
   if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
 });
 
