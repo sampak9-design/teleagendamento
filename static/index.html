@@ -445,16 +445,42 @@
             </div>
 
             <div class="form-group" style="margin-bottom:14px;">
+              <label>Modelo</label>
+              <div class="tons-grid" id="dalle-model-grid">
+                <button class="ton-btn ativo" onclick="selecionarDalleModel(this,'dall-e-3')">DALL-E 3 ⚡</button>
+                <button class="ton-btn" onclick="selecionarDalleModel(this,'dall-e-2')">DALL-E 2</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
               <label>Descrição da Arte</label>
               <textarea id="img-prompt" placeholder="Ex: arte minimalista de marketing digital, cores azul e roxo, estilo profissional, fundo escuro..." style="min-height:80px;"></textarea>
             </div>
 
-            <div class="form-group" style="margin-bottom:16px;">
+            <div class="form-group" style="margin-bottom:14px;">
               <label>Tamanho</label>
               <div class="tons-grid" id="dalle-size-grid">
                 <button class="ton-btn ativo" onclick="selecionarDalleSize(this,'1024x1024')">Quadrado 1:1</button>
-                <button class="ton-btn" onclick="selecionarDalleSize(this,'1792x1024')">Paisagem 16:9</button>
-                <button class="ton-btn" onclick="selecionarDalleSize(this,'1024x1792')">Retrato 9:16</button>
+                <button class="ton-btn" id="btn-size-landscape" onclick="selecionarDalleSize(this,'1792x1024')">Paisagem 16:9</button>
+                <button class="ton-btn" id="btn-size-portrait" onclick="selecionarDalleSize(this,'1024x1792')">Retrato 9:16</button>
+              </div>
+            </div>
+
+            <!-- Opções exclusivas do DALL-E 3 -->
+            <div id="dalle3-options">
+              <div class="form-group" style="margin-bottom:14px;">
+                <label>Qualidade</label>
+                <div class="tons-grid" id="dalle-quality-grid">
+                  <button class="ton-btn ativo" onclick="selecionarDalleQuality(this,'standard')">Standard</button>
+                  <button class="ton-btn" onclick="selecionarDalleQuality(this,'hd')">HD ✨</button>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:16px;">
+                <label>Estilo Visual</label>
+                <div class="tons-grid" id="dalle-style-grid">
+                  <button class="ton-btn ativo" onclick="selecionarDalleStyle(this,'vivid')">Vivid 🎨</button>
+                  <button class="ton-btn" onclick="selecionarDalleStyle(this,'natural')">Natural 🌿</button>
+                </div>
               </div>
             </div>
 
@@ -810,12 +836,44 @@ function trocarAbaIA(el, abaId) {
 }
 
 // ── IA Imagem ──────────────────────────────────────────────────────
+let dalleModelSelecionado = 'dall-e-3';
 let dalleSizeSelecionado = '1024x1024';
+let dalleQualitySelecionado = 'standard';
+let dalleStyleSelecionado = 'vivid';
+
+function selecionarDalleModel(el, model) {
+  document.querySelectorAll('#dalle-model-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  dalleModelSelecionado = model;
+  // DALL-E 2 não suporta 16:9 e 9:16, nem qualidade/estilo
+  const isV3 = model === 'dall-e-3';
+  document.getElementById('btn-size-landscape').style.display = isV3 ? '' : 'none';
+  document.getElementById('btn-size-portrait').style.display = isV3 ? '' : 'none';
+  document.getElementById('dalle3-options').style.display = isV3 ? '' : 'none';
+  if (!isV3) {
+    // Força tamanho compatível com DALL-E 2
+    dalleSizeSelecionado = '1024x1024';
+    document.querySelectorAll('#dalle-size-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+    document.querySelector('#dalle-size-grid .ton-btn').classList.add('ativo');
+  }
+}
 
 function selecionarDalleSize(el, size) {
   document.querySelectorAll('#dalle-size-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
   el.classList.add('ativo');
   dalleSizeSelecionado = size;
+}
+
+function selecionarDalleQuality(el, quality) {
+  document.querySelectorAll('#dalle-quality-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  dalleQualitySelecionado = quality;
+}
+
+function selecionarDalleStyle(el, style) {
+  document.querySelectorAll('#dalle-style-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  dalleStyleSelecionado = style;
 }
 
 async function gerarImagem() {
@@ -867,7 +925,7 @@ async function gerarImagem() {
     const r = await fetch('/ia/gerar-imagem', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt, size: dalleSizeSelecionado}),
+      body: JSON.stringify({prompt, model: dalleModelSelecionado, size: dalleSizeSelecionado, quality: dalleQualitySelecionado, style: dalleStyleSelecionado}),
     });
     const d = await r.json();
     if (!r.ok) {

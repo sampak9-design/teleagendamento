@@ -350,9 +350,12 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 # ── IA: Gerar imagem (DALL-E) ─────────────────────────────────────
 @app.post("/ia/gerar-imagem")
 async def ia_gerar_imagem(request: Request):
-    data   = await request.json()
-    prompt = data.get("prompt", "").strip()
-    size   = data.get("size", "1024x1024")  # 1024x1024, 1792x1024, 1024x1792
+    data    = await request.json()
+    prompt  = data.get("prompt", "").strip()
+    model   = data.get("model", "dall-e-3")     # dall-e-3 | dall-e-2
+    size    = data.get("size", "1024x1024")
+    quality = data.get("quality", "standard")   # standard | hd (dall-e-3 only)
+    style   = data.get("style", "vivid")        # vivid | natural (dall-e-3 only)
 
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt é obrigatório")
@@ -360,13 +363,11 @@ async def ia_gerar_imagem(request: Request):
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
     try:
-        resp = oai.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size=size,
-            quality="standard",
-            n=1,
-        )
+        kwargs = {"model": model, "prompt": prompt, "size": size, "n": 1}
+        if model == "dall-e-3":
+            kwargs["quality"] = quality
+            kwargs["style"] = style
+        resp = oai.images.generate(**kwargs)
         return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
