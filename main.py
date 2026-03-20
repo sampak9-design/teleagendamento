@@ -246,8 +246,19 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
     base  = f"https://api.telegram.org/bot{token}"
 
     markup = None
-    if cta_botao and cta_url:
-        markup = {"inline_keyboard": [[{"text": cta_botao, "url": cta_url}]]}
+    if cta_botao:
+        try:
+            botoes = json.loads(cta_botao)
+            if isinstance(botoes, list):
+                rows = [[{"text": b["texto"], "url": b["url"]}] for b in botoes if b.get("texto") and b.get("url")]
+                if rows:
+                    markup = {"inline_keyboard": rows}
+            else:
+                raise ValueError
+        except Exception:
+            # formato legado: cta_botao=texto simples, cta_url=url
+            if cta_url:
+                markup = {"inline_keyboard": [[{"text": cta_botao, "url": cta_url}]]}
 
     async with httpx.AsyncClient() as client:
         if tipo == "photo" and arquivo_url:

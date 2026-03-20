@@ -536,10 +536,10 @@
             </div>
           </div>
 
-          <!-- Botão CTA (aparece para todos os tipos, destaque no bolinha) -->
+          <!-- Botões CTA (até 4, em coluna) -->
           <div class="form-group" id="grupo-cta-post" style="display:none;">
             <label style="display:flex;align-items:center;justify-content:space-between;">
-              <span>Botão no post</span>
+              <span>Botões no post (até 4)</span>
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;">
                 <div class="toggle-wrap" onclick="toggleCtaPost()">
                   <div class="toggle-track" id="np-cta-track"><div class="toggle-thumb"></div></div>
@@ -547,9 +547,31 @@
                 <span style="color:#6b7280;font-size:.8rem;" id="np-cta-label">Desativado</span>
               </label>
             </label>
-            <div id="np-cta-fields" style="display:none;margin-top:8px;display:none;">
-              <input id="np-cta-botao" type="text" class="form-control" placeholder="Texto do botão (ex: Saiba mais)" style="margin-bottom:6px;">
-              <input id="np-cta-url" type="url" class="form-control" placeholder="https://...">
+            <div id="np-cta-fields" style="display:none;margin-top:10px;">
+              <div style="display:flex;flex-direction:column;gap:8px;" id="np-cta-lista">
+                <!-- botão 1 (sempre visível quando ativo) -->
+                <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
+                  <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">1</span>
+                  <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
+                  <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                </div>
+                <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
+                  <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">2</span>
+                  <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
+                  <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                </div>
+                <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
+                  <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">3</span>
+                  <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
+                  <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                </div>
+                <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
+                  <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">4</span>
+                  <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
+                  <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                </div>
+              </div>
+              <p style="font-size:.72rem;color:#4a5568;margin-top:6px;">Deixe em branco os botões que não quiser usar.</p>
             </div>
           </div>
 
@@ -1514,6 +1536,9 @@ function limparForm() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  document.querySelectorAll('#np-cta-lista .np-cta-texto, #np-cta-lista .np-cta-url').forEach(el => el.value = '');
+  const track = document.getElementById('np-cta-track');
+  if (track) { track.classList.remove('on'); document.getElementById('np-cta-label').textContent = 'Desativado'; document.getElementById('np-cta-fields').style.display = 'none'; }
   document.getElementById('np-tipo').value = 'text';
   document.getElementById('np-recorrencia').value = 'nenhuma';
   toggleArquivoUrl();
@@ -1527,8 +1552,17 @@ async function criarPost() {
   const chatId = document.getElementById('np-chat-id').value.trim();
   const dtLocal = document.getElementById('np-datetime').value;
   const ctaAtivo = document.getElementById('np-cta-track')?.classList.contains('on');
-  const ctaBotao = ctaAtivo ? document.getElementById('np-cta-botao').value.trim() : '';
-  const ctaUrl   = ctaAtivo ? document.getElementById('np-cta-url').value.trim()   : '';
+  let ctaBotao = null, ctaUrl = null;
+  if (ctaAtivo) {
+    const rows = document.querySelectorAll('#np-cta-lista .np-cta-row');
+    const botoes = [];
+    rows.forEach(row => {
+      const txt = row.querySelector('.np-cta-texto').value.trim();
+      const url = row.querySelector('.np-cta-url').value.trim();
+      if (txt && url) botoes.push({texto: txt, url});
+    });
+    if (botoes.length > 0) ctaBotao = JSON.stringify(botoes);
+  }
 
   if (!texto && tipo !== 'video_note') { toast('Digite o texto do post', 'error'); return; }
   if (!dtLocal) { toast('Selecione a data e hora', 'error'); return; }
