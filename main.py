@@ -167,60 +167,75 @@ def root():
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+async def _enviar_video_note(token: str, chat_id: str, conteudo: bytes) -> dict:
+    """Envia bytes como video note, apaga a mensagem e retorna o file_id."""
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{token}/sendVideoNote",
+            data={"chat_id": chat_id},
+            files={"video_note": ("video.mp4", conteudo, "video/mp4")},
+        )
+    data = resp.json()
+    if not data.get("ok"):
+        raise HTTPException(status_code=400, detail=f"Telegram: {data.get('description', 'Erro desconhecido')}")
+    msg        = data["result"]
+    file_id    = msg["video_note"]["file_id"]
+    message_id = msg["message_id"]
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(f"https://api.telegram.org/bot{token}/deleteMessage",
+                              json={"chat_id": chat_id, "message_id": message_id})
+    except Exception:
+        pass
+    return {"file_id": file_id}
+
+
+def _extrair_uid_jwt(jwt_str: str) -> str:
+    try:
+        payload = jwt_str.split(".")[1]
+        payload += "=" * (4 - len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
+    except Exception:
+        return ""
+
+
 @app.post("/upload/video-note")
 async def upload_video_note(
     request: Request,
     file: UploadFile = File(...),
     jwt: str = Form(default=""),
 ):
-    """Upload de video note — token passado como form field para compatibilidade multipart."""
-    # Extrai uid do JWT enviado como form field
-    uid = ""
-    if jwt:
-        try:
-            payload = jwt.split(".")[1]
-            payload += "=" * (4 - len(payload) % 4)
-            uid = json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
-        except Exception:
-            pass
-    if not uid:
-        uid = get_user_id(request)  # fallback para header
+    uid = _extrair_uid_jwt(jwt) or get_user_id(request)
     if not uid:
         raise HTTPException(status_code=401, detail="Não autenticado")
-
     token   = get_bot_token(uid)
     chat_id = get_chat_id(uid)
     if not token or not chat_id:
         raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
-
     conteudo = await file.read()
-    fname    = file.filename or "video.mp4"
+    return await _enviar_video_note(token, chat_id, conteudo)
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            f"https://api.telegram.org/bot{token}/sendVideoNote",
-            data={"chat_id": chat_id},
-            files={"video_note": (fname, conteudo, "video/mp4")},
-        )
-    data = resp.json()
-    if not data.get("ok"):
-        raise HTTPException(status_code=400, detail=f"Telegram: {data.get('description', 'Erro desconhecido')}")
 
-    msg        = data["result"]
-    file_id    = msg["video_note"]["file_id"]
-    message_id = msg["message_id"]
-
-    # Apaga a mensagem de teste do canal
+@app.post("/upload/video-note-url")
+async def upload_video_note_url(request: Request):
+    """Baixa vídeo de uma URL e envia como video note circular."""
+    uid = require_user(request)
+    body = await request.json()
+    url  = body.get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL obrigatória")
+    token   = get_bot_token(uid)
+    chat_id = get_chat_id(uid)
+    if not token or not chat_id:
+        raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                f"https://api.telegram.org/bot{token}/deleteMessage",
-                json={"chat_id": chat_id, "message_id": message_id},
-            )
-    except Exception:
-        pass
-
-    return {"file_id": file_id}
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            conteudo = r.content
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao baixar vídeo: {e}")
+    return await _enviar_video_note(token, chat_id, conteudo)
 
 
 # ── Telegram ──────────────────────────────────────────────────────
