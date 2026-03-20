@@ -200,6 +200,9 @@
     .ton-btn.ativo { border-color: #4f6ef7; background: #1a1d2e; color: #4f6ef7; }
     .ton-btn:hover { border-color: #2d3148; color: #c9d1e0; }
 
+    /* ─── CHARTS GRID ─── */
+    .charts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
     /* ─── HAMBURGER ─── */
     .hamburger { display: none; flex-direction: column; justify-content: center; gap: 5px; width: 36px; height: 36px; background: transparent; border: 1px solid #1e2235; border-radius: 7px; cursor: pointer; padding: 7px; flex-shrink: 0; }
     .hamburger span { display: block; height: 2px; background: #c9d1e0; border-radius: 2px; transition: all 0.25s; }
@@ -247,6 +250,9 @@
       /* topbar user info compacto */
       #topbar-time { display: none; }
       #topbar-user { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* charts grid 1 coluna no mobile */
+      .charts-grid-2 { grid-template-columns: 1fr; }
 
       /* modal full width */
       #modal-post > div { width: 95vw !important; max-height: 85vh; overflow-y: auto; }
@@ -935,7 +941,7 @@
         <div style="position:relative;height:180px;"><canvas id="chart-membros"></canvas></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="charts-grid-2">
         <!-- Gráfico: Posts por dia -->
         <div class="panel">
           <div class="panel-title">
@@ -955,7 +961,7 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="charts-grid-2">
         <!-- Gráfico: Saídas por dia -->
         <div class="panel">
           <div class="panel-title" style="color:#ef4444;">
