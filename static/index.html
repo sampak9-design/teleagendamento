@@ -2199,12 +2199,14 @@ carregarStats();
 checarBot();
 setInterval(checarBot, 30000);
 
-// Definir datetime mínimo como agora
+// Definir datetime mínimo como agora (em horário local do navegador)
 const npdt = document.getElementById('np-datetime');
 const agora = new Date();
 agora.setMinutes(agora.getMinutes() + 5);
-npdt.min = agora.toISOString().slice(0,16);
-npdt.value = agora.toISOString().slice(0,16);
+const pad = n => String(n).padStart(2, '0');
+const localStr = `${agora.getFullYear()}-${pad(agora.getMonth()+1)}-${pad(agora.getDate())}T${pad(agora.getHours())}:${pad(agora.getMinutes())}`;
+npdt.min   = localStr;
+npdt.value = localStr;
 </script>
 </body>
 </html>
