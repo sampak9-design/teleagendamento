@@ -269,6 +269,7 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
         elif tipo == "video_note" and arquivo_url:
             # Video circular — file_id salvo após primeiro upload
             payload = {"chat_id": chat_id, "video_note": arquivo_url}
+            if markup: payload["reply_markup"] = markup
             resp = await client.post(f"{base}/sendVideoNote", json=payload)
         else:
             payload = {"chat_id": chat_id, "text": texto, "parse_mode": "HTML"}
