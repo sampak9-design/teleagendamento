@@ -199,6 +199,70 @@
     .ton-btn { padding: 5px 12px; border-radius: 20px; border: 1px solid #1e2235; background: transparent; color: #6b7280; font-size: 0.75rem; cursor: pointer; font-family: inherit; transition: all 0.12s; }
     .ton-btn.ativo { border-color: #4f6ef7; background: #1a1d2e; color: #4f6ef7; }
     .ton-btn:hover { border-color: #2d3148; color: #c9d1e0; }
+
+    /* ─── HAMBURGER ─── */
+    .hamburger { display: none; flex-direction: column; justify-content: center; gap: 5px; width: 36px; height: 36px; background: transparent; border: 1px solid #1e2235; border-radius: 7px; cursor: pointer; padding: 7px; flex-shrink: 0; }
+    .hamburger span { display: block; height: 2px; background: #c9d1e0; border-radius: 2px; transition: all 0.25s; }
+    .hamburger.aberto span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .hamburger.aberto span:nth-child(2) { opacity: 0; }
+    .hamburger.aberto span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* ─── OVERLAY MOBILE ─── */
+    #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 199; }
+    #sidebar-overlay.ativo { display: block; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+      .hamburger { display: flex; }
+
+      .sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+        transform: translateX(-100%); transition: transform 0.25s ease;
+        width: 240px; min-width: 240px;
+      }
+      .sidebar.aberta { transform: translateX(0); }
+
+      .main { width: 100%; min-width: 0; }
+
+      .topbar { padding: 0 14px; }
+      .topbar-left { gap: 10px; }
+
+      .content { padding: 14px; }
+
+      .cards-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+      .card-value { font-size: 1.4rem; }
+
+      .form-grid { grid-template-columns: 1fr; }
+      .form-group.full { grid-column: 1; }
+
+      .analise-grid { grid-template-columns: 1fr; }
+
+      .panel { padding: 14px; }
+
+      /* tabelas viram scroll horizontal */
+      .panel > div, .panel > table { overflow-x: auto; }
+      table { min-width: 480px; }
+
+      /* topbar user info compacto */
+      #topbar-time { display: none; }
+      #topbar-user { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* modal full width */
+      #modal-post > div { width: 95vw !important; max-height: 85vh; overflow-y: auto; }
+
+      /* score layout */
+      .score-circle { width: 60px; height: 60px; }
+      .score-num { font-size: 1.1rem; }
+
+      /* proximo card */
+      .proximo-card { flex-wrap: wrap; gap: 8px; }
+      .proximo-divider { display: none; }
+    }
+
+    @media (max-width: 420px) {
+      .cards-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -251,8 +315,11 @@
   </div>
 </div>
 
+<!-- ─── SIDEBAR OVERLAY (mobile) ─── -->
+<div id="sidebar-overlay" onclick="fecharSidebar()"></div>
+
 <!-- ─── SIDEBAR ─── -->
-<div class="sidebar">
+<div class="sidebar" id="sidebar">
   <div class="sidebar-logo">
     <div class="logo-icon">✈</div>
     <span class="logo-text">TeleScheduler</span>
@@ -319,6 +386,9 @@
 <div class="main">
   <div class="topbar">
     <div class="topbar-left">
+      <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+        <span></span><span></span><span></span>
+      </button>
       <span class="topbar-title" id="topbar-title">Dashboard</span>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -1199,12 +1269,28 @@ async function authFetch(url, options = {}) {
 let tomSelecionado = 'profissional';
 let posts = [];
 
+// ── Sidebar mobile ─────────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const hb = document.getElementById('hamburger');
+  const ov = document.getElementById('sidebar-overlay');
+  const aberta = sb.classList.toggle('aberta');
+  hb.classList.toggle('aberto', aberta);
+  ov.classList.toggle('ativo', aberta);
+}
+function fecharSidebar() {
+  document.getElementById('sidebar').classList.remove('aberta');
+  document.getElementById('hamburger').classList.remove('aberto');
+  document.getElementById('sidebar-overlay').classList.remove('ativo');
+}
+
 // ── Navegação ──────────────────────────────────────────────────────
 function navegar(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('ativa'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
   document.getElementById('section-' + id).classList.add('ativa');
   el.classList.add('ativo');
+  fecharSidebar();
 
   const titulos = {
     'dashboard': 'Dashboard',
