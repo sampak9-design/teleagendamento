@@ -616,6 +616,8 @@ async def criar_post(request: Request):
         "agendado_para": data.get("agendado_para"),
         "recorrencia":  data.get("recorrencia", "nenhuma"),
         "status":       "agendado",
+        "cta_botao":    data.get("cta_botao") or None,
+        "cta_url":      data.get("cta_url") or None,
     }
 
     result = db.table("posts_agendados").insert(registro).execute()
