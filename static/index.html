@@ -460,6 +460,23 @@
             </div>
           </div>
 
+          <!-- Botão CTA (aparece para todos os tipos, destaque no bolinha) -->
+          <div class="form-group" id="grupo-cta-post" style="display:none;">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Botão no post</span>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;">
+                <div class="toggle-wrap" onclick="toggleCtaPost()">
+                  <div class="toggle-track" id="np-cta-track"><div class="toggle-thumb"></div></div>
+                </div>
+                <span style="color:#6b7280;font-size:.8rem;" id="np-cta-label">Desativado</span>
+              </label>
+            </label>
+            <div id="np-cta-fields" style="display:none;margin-top:8px;display:none;">
+              <input id="np-cta-botao" type="text" class="form-control" placeholder="Texto do botão (ex: Saiba mais)" style="margin-bottom:6px;">
+              <input id="np-cta-url" type="url" class="form-control" placeholder="https://...">
+            </div>
+          </div>
+
           <div class="form-group">
             <label>Chat ID / Canal (opcional)</label>
             <input id="np-chat-id" type="text" placeholder="@meucanal ou -100123456789">
@@ -1372,18 +1389,32 @@ function vnTab(modo) {
 
 function toggleArquivoUrl() {
   const tipo = document.getElementById('np-tipo').value;
-  const gArquivo    = document.getElementById('grupo-arquivo');
-  const gVideoNote  = document.getElementById('grupo-video-note');
+  const gArquivo   = document.getElementById('grupo-arquivo');
+  const gVideoNote = document.getElementById('grupo-video-note');
+  const gCta       = document.getElementById('grupo-cta-post');
   if (tipo === 'text') {
     gArquivo.style.display   = 'none';
     gVideoNote.style.display = 'none';
+    gCta.style.display       = 'none';
   } else if (tipo === 'video_note') {
     gArquivo.style.display   = 'none';
     gVideoNote.style.display = '';
+    gCta.style.display       = '';
   } else {
     gArquivo.style.display   = '';
     gVideoNote.style.display = 'none';
+    gCta.style.display       = '';
   }
+}
+
+function toggleCtaPost() {
+  const track  = document.getElementById('np-cta-track');
+  const label  = document.getElementById('np-cta-label');
+  const fields = document.getElementById('np-cta-fields');
+  const ativo  = !track.classList.contains('on');
+  track.classList.toggle('on', ativo);
+  label.textContent    = ativo ? 'Ativado' : 'Desativado';
+  fields.style.display = ativo ? '' : 'none';
 }
 
 function limparForm() {
@@ -1403,6 +1434,9 @@ async function criarPost() {
   const arquivoUrl = document.getElementById('np-arquivo-url').value.trim();
   const chatId = document.getElementById('np-chat-id').value.trim();
   const dtLocal = document.getElementById('np-datetime').value;
+  const ctaAtivo = document.getElementById('np-cta-track')?.classList.contains('on');
+  const ctaBotao = ctaAtivo ? document.getElementById('np-cta-botao').value.trim() : '';
+  const ctaUrl   = ctaAtivo ? document.getElementById('np-cta-url').value.trim()   : '';
 
   if (!texto && tipo !== 'video_note') { toast('Digite o texto do post', 'error'); return; }
   if (!dtLocal) { toast('Selecione a data e hora', 'error'); return; }
@@ -1452,7 +1486,7 @@ async function criarPost() {
     const r = await authFetch('/posts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({texto: texto||'', tipo, recorrencia, arquivo_url: fileId||null, chat_id: chatId||null, agendado_para: dtISO}),
+      body: JSON.stringify({texto: texto||'', tipo, recorrencia, arquivo_url: fileId||null, chat_id: chatId||null, agendado_para: dtISO, cta_botao: ctaBotao||null, cta_url: ctaUrl||null}),
     });
     const d = await r.json();
     if (r.ok) {
