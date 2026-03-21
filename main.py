@@ -12,6 +12,7 @@ import httpx
 import json
 import base64
 import os
+import random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -1090,15 +1091,38 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     except Exception:
         contexto_canal = ""
 
+    formatos = [
+        "dica prática e direta",
+        "pergunta provocativa para reflexão",
+        "dado ou estatística surpreendente",
+        "erro comum que as pessoas cometem",
+        "mito vs verdade",
+        "passo a passo rápido (3 etapas)",
+        "frase de impacto seguida de explicação",
+        "comparação ou analogia criativa",
+        "história curta de exemplo real",
+        "lista rápida com 3 itens",
+    ]
+    formato_escolhido = random.choice(formatos)
+
+    textos_recentes = "\n".join(
+        f"- {r.get('texto','')[:80]}"
+        for r in (canal_rows.data or [])
+    ) if contexto_canal else ""
+
     prompt = f"""Você é um especialista em marketing de conteúdo para Telegram.
-Gere UMA postagem para um canal sobre: {topico}
+Gere UMA postagem ORIGINAL para um canal sobre: {topico}
 Estilo: {estilo}
-{"Posts recentes do canal para referência de tom:\n" + contexto_canal if contexto_canal else ""}
+Formato obrigatório para ESTE post: {formato_escolhido}
+
+{"Posts recentes do canal (NÃO repita esses assuntos ou abordagens):\n" + textos_recentes if textos_recentes else ""}
+
 Regras:
 - Máximo 280 caracteres
 - Use emojis relevantes
 - Seja direto e envolvente
 - NÃO use markdown, apenas texto puro e emojis
+- Use um ângulo e abordagem DIFERENTES dos posts recentes acima
 Retorne APENAS o texto do post, sem explicações."""
 
     ai_client = get_anthropic_client(uid)
