@@ -481,7 +481,21 @@
         <div class="form-grid">
           <div class="form-group full">
             <label>Texto / Legenda</label>
-            <textarea id="np-texto" placeholder="Escreva o texto do post aqui... (suporta HTML do Telegram: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;)"></textarea>
+            <div style="border:1px solid #1e2235;border-radius:7px;overflow:hidden;">
+              <!-- Toolbar de formatação -->
+              <div style="display:flex;flex-wrap:wrap;gap:2px;padding:6px 8px;background:#13151f;border-bottom:1px solid #1e2235;">
+                <button type="button" onclick="fmtTexto('b')" title="Negrito" style="width:30px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#e2e8f0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;">B</button>
+                <button type="button" onclick="fmtTexto('i')" title="Itálico" style="width:30px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#e2e8f0;font-size:.82rem;font-style:italic;cursor:pointer;font-family:inherit;">I</button>
+                <button type="button" onclick="fmtTexto('u')" title="Sublinhado" style="width:30px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#e2e8f0;font-size:.82rem;text-decoration:underline;cursor:pointer;font-family:inherit;">U</button>
+                <button type="button" onclick="fmtTexto('s')" title="Tachado" style="width:30px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#e2e8f0;font-size:.82rem;text-decoration:line-through;cursor:pointer;font-family:inherit;">S</button>
+                <button type="button" onclick="fmtTexto('code')" title="Código" style="width:30px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#e2e8f0;font-size:.78rem;cursor:pointer;font-family:monospace;">&lt;/&gt;</button>
+                <div style="width:1px;background:#2d3148;margin:3px 4px;"></div>
+                <button type="button" onclick="fmtLink()" title="Inserir Link" style="padding:0 10px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#60a5fa;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;">🔗 Link</button>
+                <div style="width:1px;background:#2d3148;margin:3px 4px;"></div>
+                <button type="button" onclick="fmtTexto('tg-spoiler')" title="Spoiler" style="padding:0 10px;height:28px;background:#1e2235;border:none;border-radius:5px;color:#a78bfa;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;">👁 Spoiler</button>
+              </div>
+              <textarea id="np-texto" placeholder="Escreva o texto do post aqui..." style="border:none;border-radius:0;"></textarea>
+            </div>
           </div>
 
           <div class="form-group">
@@ -1519,6 +1533,29 @@ function toggleArquivoUrl() {
     gVideoNote.style.display = 'none';
     gCta.style.display       = '';
   }
+}
+
+// ── Formatação de texto ────────────────────────────────────────────
+function fmtTexto(tag) {
+  const ta = document.getElementById('np-texto');
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const sel = ta.value.substring(start, end) || 'texto';
+  const antes = ta.value.substring(0, start);
+  const depois = ta.value.substring(end);
+  ta.value = `${antes}<${tag}>${sel}</${tag}>${depois}`;
+  ta.focus();
+  ta.setSelectionRange(start + tag.length + 2, start + tag.length + 2 + sel.length);
+}
+function fmtLink() {
+  const ta = document.getElementById('np-texto');
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const sel = ta.value.substring(start, end) || 'clique aqui';
+  const url = prompt('URL do link:');
+  if (!url) return;
+  const antes = ta.value.substring(0, start);
+  const depois = ta.value.substring(end);
+  ta.value = `${antes}<a href="${url}">${sel}</a>${depois}`;
+  ta.focus();
 }
 
 function toggleCtaPost() {
