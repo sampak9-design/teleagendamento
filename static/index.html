@@ -669,6 +669,16 @@
             </div>
           </div>
 
+          <div class="form-group" style="margin-bottom:14px;">
+            <label>Gerar Imagem</label>
+            <select id="ia-gerar-img-modelo" class="form-control">
+              <option value="false">Sem imagem</option>
+              <option value="gpt-image-1">GPT Image 1 🚀</option>
+              <option value="dall-e-3">DALL-E 3 ⚡</option>
+              <option value="dall-e-2">DALL-E 2</option>
+            </select>
+          </div>
+
           <button class="btn btn-purple" onclick="gerarPost()" id="btn-gerar" style="width:100%;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             Gerar Post
@@ -686,6 +696,8 @@
             </button>
           </div>
           <div class="ia-output loading" id="ia-resultado">O post gerado pela IA aparecerá aqui...</div>
+          <div id="ia-resultado-img-container" style="display:none;margin-top:10px;background:#0f1117;border-radius:8px;border:1px solid #1e2235;overflow:hidden;text-align:center;">
+          </div>
         </div>
       </div>
 
@@ -1856,31 +1868,52 @@ function selecionarTom(el, tom) {
   tomSelecionado = tom;
 }
 
+let _gerarPostImgUrl = null;
+
 async function gerarPost() {
   const tema = document.getElementById('ia-tema').value.trim();
   if (!tema) { toast('Digite um tema para o post', 'error'); return; }
 
+  const imgModelo = document.getElementById('ia-gerar-img-modelo').value;
   const btn = document.getElementById('btn-gerar');
   const resultado = document.getElementById('ia-resultado');
   const btnUsar = document.getElementById('btn-usar');
+  const imgContainer = document.getElementById('ia-resultado-img-container');
 
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Gerando...';
   resultado.className = 'ia-output loading';
   resultado.textContent = 'A IA está criando seu post...';
   btnUsar.style.display = 'none';
+  imgContainer.style.display = 'none';
+  imgContainer.innerHTML = '';
+  _gerarPostImgUrl = null;
+
+  if (imgModelo !== 'false') {
+    btn.innerHTML = '<div class="spinner"></div> Gerando texto + imagem...';
+  } else {
+    btn.innerHTML = '<div class="spinner"></div> Gerando...';
+  }
 
   try {
     const r = await authFetch('/ia/gerar', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({tema, tom: tomSelecionado}),
+      body: JSON.stringify({tema, tom: tomSelecionado, img_modelo: imgModelo}),
     });
     const d = await r.json();
     if (r.ok) {
       resultado.className = 'ia-output';
       resultado.textContent = d.texto;
       btnUsar.style.display = '';
+      if (d.img_url) {
+        _gerarPostImgUrl = d.img_url;
+        const img = new Image();
+        img.style.cssText = 'width:100%;height:auto;border-radius:6px;display:block;max-height:300px;object-fit:contain;';
+        img.src = d.img_url;
+        imgContainer.innerHTML = '';
+        imgContainer.appendChild(img);
+        imgContainer.style.display = 'block';
+      }
     } else {
       resultado.textContent = 'Erro: ' + d.detail;
       toast('Erro ao gerar post', 'error');
@@ -1896,12 +1929,16 @@ async function gerarPost() {
 
 function usarPostGerado() {
   const texto = document.getElementById('ia-resultado').textContent;
-  // Navegar para Novo Post e preencher o texto
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
   const navNovo = [...document.querySelectorAll('.nav-item')].find(el => el.textContent.trim().startsWith('Novo Post'));
   if (navNovo) navegar('novo-post', navNovo);
   setTimeout(() => {
     document.getElementById('np-texto').value = texto;
+    if (_gerarPostImgUrl) {
+      document.getElementById('np-tipo').value = 'photo';
+      toggleArquivoUrl();
+      document.getElementById('np-arquivo-url').value = _gerarPostImgUrl;
+    }
     toast('Post adicionado ao agendador!', 'success');
   }, 100);
 }

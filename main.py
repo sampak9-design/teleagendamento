@@ -706,6 +706,7 @@ async def ia_gerar(request: Request):
     data = await request.json()
     tema = data.get("tema", "").strip()
     tom  = data.get("tom", "profissional")
+    img_modelo = data.get("img_modelo", "false")
 
     if not tema:
         raise HTTPException(status_code=400, detail="tema é obrigatório")
@@ -731,7 +732,38 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}]
         )
-        return {"texto": msg.content[0].text}
+        texto = msg.content[0].text
+        resultado = {"texto": texto}
+
+        # Gerar imagem se modelo selecionado
+        if img_modelo and img_modelo != "false":
+            try:
+                oai_client = get_openai_client(uid)
+                if oai_client:
+                    if img_modelo == "gpt-image-1":
+                        prompt_img = f"{tema}: {texto[:200]}. Professional, high quality, visually striking. Any text in Brazilian Portuguese."
+                        img_resp = await asyncio.to_thread(
+                            oai_client.images.generate,
+                            model="gpt-image-1", prompt=prompt_img,
+                            size="1024x1024", quality="medium", n=1
+                        )
+                        img_b64 = img_resp.data[0].b64_json
+                        filename = f"{uuid.uuid4().hex}.png"
+                        filepath = os.path.join("static", "generated", filename)
+                        with open(filepath, "wb") as f:
+                            f.write(base64.b64decode(img_b64))
+                        resultado["img_url"] = f"/static/generated/{filename}"
+                    else:
+                        prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
+                        kwargs = {"model": img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
+                        if img_modelo == "dall-e-3":
+                            kwargs["quality"] = "standard"
+                        img_resp = await asyncio.to_thread(oai_client.images.generate, **kwargs)
+                        resultado["img_url"] = img_resp.data[0].url
+            except Exception as e:
+                print(f"[IA GERAR IMG ERRO] {e}")
+
+        return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
