@@ -725,7 +725,8 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 
     try:
         cliente = get_anthropic_client(uid)
-        msg = cliente.messages.create(
+        msg = await asyncio.to_thread(
+            cliente.messages.create,
             model="claude-sonnet-4-6",
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}]
@@ -740,7 +741,8 @@ async def _enriquecer_prompt_imagem(prompt: str, uid: str) -> str:
     """Usa Claude para transformar um prompt simples num prompt rico para geração de imagem."""
     try:
         ai_client = get_anthropic_client(uid)
-        msg = ai_client.messages.create(
+        msg = await asyncio.to_thread(
+            ai_client.messages.create,
             model="claude-sonnet-4-6",
             max_tokens=400,
             messages=[{"role": "user", "content": f"""You are an expert at writing prompts for AI image generation (DALL-E 3, GPT Image 1).
@@ -781,8 +783,7 @@ async def ia_gerar_imagem(request: Request):
 
         if model == "gpt-image-1":
             kwargs = {"model": "gpt-image-1", "prompt": prompt_enriquecido, "size": size, "n": 1, "quality": quality}
-            resp = cliente_oai.images.generate(**kwargs)
-            # GPT Image 1 retorna base64
+            resp = await asyncio.to_thread(cliente_oai.images.generate, **kwargs)
             img_b64 = resp.data[0].b64_json
             # Salvar em arquivo para servir via URL
             filename = f"{uuid.uuid4().hex}.png"
@@ -796,7 +797,7 @@ async def ia_gerar_imagem(request: Request):
             if model == "dall-e-3":
                 kwargs["quality"] = quality
                 kwargs["style"] = style
-            resp = cliente_oai.images.generate(**kwargs)
+            resp = await asyncio.to_thread(cliente_oai.images.generate, **kwargs)
             return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt, "prompt_usado": prompt_enriquecido}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -884,7 +885,8 @@ Histórico recente de posts:
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
         cliente = get_anthropic_client(uid)
-        msg = cliente.messages.create(
+        msg = await asyncio.to_thread(
+            cliente.messages.create,
             model="claude-sonnet-4-6",
             max_tokens=1000,
             messages=[{"role": "user", "content": prompt}]
@@ -1153,7 +1155,8 @@ Regras:
 Retorne APENAS o texto do post, sem explicações."""
 
     ai_client = get_anthropic_client(uid)
-    msg = ai_client.messages.create(
+    msg = await asyncio.to_thread(
+        ai_client.messages.create,
         model="claude-sonnet-4-6",
         max_tokens=300,
         messages=[{"role": "user", "content": prompt}]
@@ -1181,9 +1184,9 @@ Retorne APENAS o texto do post, sem explicações."""
             oai_client = get_openai_client(uid)
             if oai_client:
                 if piloto_img_modelo == "gpt-image-1":
-                    # GPT Image 1 entende bem prompts simples, não precisa enriquecer
                     prompt_img = f"{topico}: {texto[:200]}. Professional, high quality, visually striking. Any text in Brazilian Portuguese."
-                    img_resp = oai_client.images.generate(
+                    img_resp = await asyncio.to_thread(
+                        oai_client.images.generate,
                         model="gpt-image-1", prompt=prompt_img,
                         size="1024x1024", quality="medium", n=1
                     )
@@ -1198,7 +1201,7 @@ Retorne APENAS o texto do post, sem explicações."""
                     kwargs = {"model": piloto_img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
                     if piloto_img_modelo == "dall-e-3":
                         kwargs["quality"] = "standard"
-                    img_resp = oai_client.images.generate(**kwargs)
+                    img_resp = await asyncio.to_thread(oai_client.images.generate, **kwargs)
                     post_data["arquivo_url"] = img_resp.data[0].url
                 post_data["tipo"] = "photo"
         except Exception as e:
