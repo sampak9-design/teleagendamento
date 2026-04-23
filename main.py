@@ -743,7 +743,7 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
                 oai_client = get_openai_client(uid)
                 if oai_client:
                     if img_modelo == "gpt-image-1":
-                        prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
+                        prompt_img = await _enriquecer_prompt_imagem(tema, uid)
                         img_resp = await asyncio.to_thread(
                             oai_client.images.generate,
                             model="gpt-image-1", prompt=prompt_img,
@@ -756,7 +756,7 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
                             f.write(base64.b64decode(img_b64))
                         resultado["img_url"] = f"/static/generated/{filename}"
                     else:
-                        prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
+                        prompt_img = await _enriquecer_prompt_imagem(tema, uid)
                         kwargs = {"model": img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
                         if img_modelo == "dall-e-3":
                             kwargs["quality"] = "standard"
@@ -787,13 +787,14 @@ Idea: {prompt}
 Rules:
 - Write in English (AI image models work best with English prompts)
 - Be very descriptive: include style, lighting, composition, colors, mood
-- If the image should contain text/words, specify they must be in Brazilian Portuguese
+- Do NOT include any text, words, letters, or typography in the image
+- The image must be purely visual, no written content at all
 - Do NOT include any explanation — return ONLY the final prompt
 - Maximum 400 characters"""}]
         )
         return msg.content[0].text.strip()
     except Exception:
-        return prompt + ". Any text or writing in the image must be in Brazilian Portuguese only."
+        return prompt + ". Do not include any text, words or letters in the image."
 
 
 @app.post("/ia/gerar-imagem")
@@ -1218,7 +1219,7 @@ Retorne APENAS o texto do post, sem explicações."""
             oai_client = get_openai_client(uid)
             if oai_client:
                 if piloto_img_modelo == "gpt-image-1":
-                    prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
+                    prompt_img = await _enriquecer_prompt_imagem(topico, uid)
                     img_resp = await asyncio.to_thread(
                         oai_client.images.generate,
                         model="gpt-image-1", prompt=prompt_img,
@@ -1231,7 +1232,7 @@ Retorne APENAS o texto do post, sem explicações."""
                         f.write(base64.b64decode(img_b64))
                     post_data["arquivo_url"] = f"/static/generated/{filename}"
                 else:
-                    prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
+                    prompt_img = await _enriquecer_prompt_imagem(topico, uid)
                     kwargs = {"model": piloto_img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
                     if piloto_img_modelo == "dall-e-3":
                         kwargs["quality"] = "standard"
