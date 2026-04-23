@@ -263,11 +263,20 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
             if cta_url:
                 markup = {"inline_keyboard": [[{"text": cta_botao, "url": cta_url}]]}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         if tipo == "photo" and arquivo_url:
-            payload = {"chat_id": chat_id, "photo": arquivo_url, "caption": texto, "parse_mode": "HTML"}
-            if markup: payload["reply_markup"] = markup
-            resp = await client.post(f"{base}/sendPhoto", json=payload)
+            # Arquivo local (ex: GPT Image 1) → upload direto
+            if arquivo_url.startswith("/static/generated/"):
+                filepath = arquivo_url.lstrip("/")
+                data = {"chat_id": chat_id, "caption": texto, "parse_mode": "HTML"}
+                if markup: data["reply_markup"] = json.dumps(markup)
+                with open(filepath, "rb") as f:
+                    files = {"photo": (os.path.basename(filepath), f, "image/png")}
+                    resp = await client.post(f"{base}/sendPhoto", data=data, files=files)
+            else:
+                payload = {"chat_id": chat_id, "photo": arquivo_url, "caption": texto, "parse_mode": "HTML"}
+                if markup: payload["reply_markup"] = markup
+                resp = await client.post(f"{base}/sendPhoto", json=payload)
         elif tipo == "video" and arquivo_url:
             payload = {"chat_id": chat_id, "video": arquivo_url, "caption": texto, "parse_mode": "HTML"}
             if markup: payload["reply_markup"] = markup
@@ -1166,13 +1175,11 @@ Retorne APENAS o texto do post, sem explicações."""
         post_data["cta_botao"] = cta_botao
         post_data["cta_url"]   = cta_url
 
-    # Gerar imagem se ativado (com timeout de 60s, se falhar envia só texto)
+    # Gerar imagem se ativado
     if gerar_img:
         try:
-            async def _gerar_img():
-                oai_client = get_openai_client(uid)
-                if not oai_client:
-                    return
+            oai_client = get_openai_client(uid)
+            if oai_client:
                 prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
                 if piloto_img_modelo == "gpt-image-1":
                     img_resp = oai_client.images.generate(
@@ -1192,12 +1199,8 @@ Retorne APENAS o texto do post, sem explicações."""
                     img_resp = oai_client.images.generate(**kwargs)
                     post_data["arquivo_url"] = img_resp.data[0].url
                 post_data["tipo"] = "photo"
-
-            await asyncio.wait_for(_gerar_img(), timeout=60)
-        except asyncio.TimeoutError:
-            print(f"[PILOTO IMG TIMEOUT] Imagem demorou mais de 60s, enviando só texto")
         except Exception as e:
-            print(f"[PILOTO IMG ERRO] {e}, enviando só texto")
+            print(f"[PILOTO IMG ERRO] {e}")
 
     db.table("posts_agendados").insert(post_data).execute()
 
