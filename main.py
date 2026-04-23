@@ -1064,7 +1064,11 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     posts_dia   = int(get_cfg("piloto_posts_dia",    "3",   uid))
     topico      = get_cfg("piloto_topico",           "",    uid)
     estilo      = get_cfg("piloto_estilo",   "engajador",   uid)
-    gerar_img   = get_cfg("piloto_imagem",       "false",   uid) == "true"
+    piloto_img_modelo = get_cfg("piloto_imagem",   "false",   uid)
+    gerar_img   = piloto_img_modelo != "false"
+    # Compatibilidade: "true" antigo vira "dall-e-3"
+    if piloto_img_modelo == "true":
+        piloto_img_modelo = "dall-e-3"
     h_inicio    = int(get_cfg("piloto_h_inicio",     "8",   uid))
     h_fim       = int(get_cfg("piloto_h_fim",       "22",   uid))
     ultimo      = get_cfg("piloto_ultimo_post",      "",    uid)
@@ -1167,11 +1171,23 @@ Retorne APENAS o texto do post, sem explicações."""
             oai_client = get_openai_client(uid)
             if oai_client:
                 prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
-                img_resp = oai_client.images.generate(
-                    model="dall-e-3", prompt=prompt_img,
-                    size="1024x1024", quality="standard", n=1
-                )
-                post_data["arquivo_url"] = img_resp.data[0].url
+                if piloto_img_modelo == "gpt-image-1":
+                    img_resp = oai_client.images.generate(
+                        model="gpt-image-1", prompt=prompt_img,
+                        size="1024x1024", quality="high", n=1
+                    )
+                    img_b64 = img_resp.data[0].b64_json
+                    filename = f"{uuid.uuid4().hex}.png"
+                    filepath = os.path.join("static", "generated", filename)
+                    with open(filepath, "wb") as f:
+                        f.write(base64.b64decode(img_b64))
+                    post_data["arquivo_url"] = f"/static/generated/{filename}"
+                else:
+                    kwargs = {"model": piloto_img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
+                    if piloto_img_modelo == "dall-e-3":
+                        kwargs["quality"] = "standard"
+                    img_resp = oai_client.images.generate(**kwargs)
+                    post_data["arquivo_url"] = img_resp.data[0].url
                 post_data["tipo"] = "photo"
         except Exception as e:
             print(f"[PILOTO IMG ERRO] {e}")

@@ -1131,10 +1131,12 @@
               <input type="number" id="piloto-posts-dia" class="form-control" min="1" max="24" value="3">
             </div>
             <div class="form-group">
-              <label class="form-label">Gerar Imagem (DALL-E)</label>
+              <label class="form-label">Gerar Imagem</label>
               <select id="piloto-imagem" class="form-control">
                 <option value="false">Não</option>
-                <option value="true">Sim</option>
+                <option value="gpt-image-1">GPT Image 1 🚀</option>
+                <option value="dall-e-3">DALL-E 3 ⚡</option>
+                <option value="dall-e-2">DALL-E 2</option>
               </select>
             </div>
           </div>
@@ -2293,6 +2295,8 @@ async function carregarPiloto() {
     document.getElementById('piloto-estilo').value    = d.piloto_estilo    || 'engajador';
     document.getElementById('piloto-posts-dia').value = d.piloto_posts_dia || '3';
     document.getElementById('piloto-imagem').value    = d.piloto_imagem    || 'false';
+    // Compatibilidade: "true" antigo vira "dall-e-3"
+    if (document.getElementById('piloto-imagem').value === 'true') document.getElementById('piloto-imagem').value = 'dall-e-3';
     document.getElementById('piloto-h-inicio').value  = d.piloto_h_inicio  || '8';
     document.getElementById('piloto-h-fim').value     = d.piloto_h_fim     || '22';
 
