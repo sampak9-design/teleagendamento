@@ -32,6 +32,8 @@ ai        = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 oai       = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 scheduler = AsyncIOScheduler()
 
+os.makedirs(os.path.join("static", "generated"), exist_ok=True)
+
 # ── Auth helpers ───────────────────────────────────────────────────
 def get_user_id(request: Request) -> str:
     """Extrai o user_id (sub) do JWT Supabase no header Authorization."""
