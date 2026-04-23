@@ -702,6 +702,7 @@
             <div class="form-group" style="margin-bottom:14px;">
               <label>Modelo</label>
               <div class="tons-grid" id="dalle-model-grid">
+                <button class="ton-btn" onclick="selecionarDalleModel(this,'gpt-image-1')">GPT Image 1 🚀</button>
                 <button class="ton-btn ativo" onclick="selecionarDalleModel(this,'dall-e-3')">DALL-E 3 ⚡</button>
                 <button class="ton-btn" onclick="selecionarDalleModel(this,'dall-e-2')">DALL-E 2</button>
               </div>
@@ -718,6 +719,19 @@
                 <button class="ton-btn ativo" onclick="selecionarDalleSize(this,'1024x1024')">Quadrado 1:1</button>
                 <button class="ton-btn" id="btn-size-landscape" onclick="selecionarDalleSize(this,'1792x1024')">Paisagem 16:9</button>
                 <button class="ton-btn" id="btn-size-portrait" onclick="selecionarDalleSize(this,'1024x1792')">Retrato 9:16</button>
+              </div>
+            </div>
+
+            <!-- Opções exclusivas do GPT Image 1 -->
+            <div id="gpt-image-options" style="display:none;">
+              <div class="form-group" style="margin-bottom:14px;">
+                <label>Qualidade</label>
+                <div class="tons-grid" id="gpt-quality-grid">
+                  <button class="ton-btn" onclick="selecionarDalleQuality(this,'low')">Low</button>
+                  <button class="ton-btn" onclick="selecionarDalleQuality(this,'medium')">Medium</button>
+                  <button class="ton-btn ativo" onclick="selecionarDalleQuality(this,'high')">High ✨</button>
+                  <button class="ton-btn" onclick="selecionarDalleQuality(this,'auto')">Auto</button>
+                </div>
               </div>
             </div>
 
@@ -889,7 +903,7 @@
         <div class="panel" style="margin-bottom:24px;">
           <div class="panel-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            DALL-E — IA de Imagens (OpenAI)
+            OpenAI — IA de Imagens (GPT Image 1 / DALL-E)
           </div>
           <div class="form-group">
             <label>OpenAI API Key</label>
@@ -897,7 +911,7 @@
             <span style="font-size:0.7rem;color:#4a5568;" id="cfg-openai-status"></span>
           </div>
           <div style="margin-top:10px;font-size:0.75rem;color:#4a5568;">
-            Usada para: gerar imagens com DALL-E 2 / DALL-E 3. Obtenha em <span style="color:#4f6ef7;">platform.openai.com/api-keys</span>
+            Usada para: gerar imagens com GPT Image 1, DALL-E 3 e DALL-E 2. Obtenha em <span style="color:#4f6ef7;">platform.openai.com/api-keys</span>
           </div>
         </div>
 
@@ -1688,16 +1702,46 @@ function selecionarDalleModel(el, model) {
   document.querySelectorAll('#dalle-model-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
   el.classList.add('ativo');
   dalleModelSelecionado = model;
-  // DALL-E 2 não suporta 16:9 e 9:16, nem qualidade/estilo
+
   const isV3 = model === 'dall-e-3';
-  document.getElementById('btn-size-landscape').style.display = isV3 ? '' : 'none';
-  document.getElementById('btn-size-portrait').style.display = isV3 ? '' : 'none';
+  const isGpt = model === 'gpt-image-1';
+  const isV2 = model === 'dall-e-2';
+
+  // Mostrar/esconder opções por modelo
   document.getElementById('dalle3-options').style.display = isV3 ? '' : 'none';
-  if (!isV3) {
-    // Força tamanho compatível com DALL-E 2
+  document.getElementById('gpt-image-options').style.display = isGpt ? '' : 'none';
+
+  // GPT Image 1: tamanhos 1024x1024, 1536x1024, 1024x1536
+  // DALL-E 3: 1024x1024, 1792x1024, 1024x1792
+  // DALL-E 2: apenas 1024x1024
+  const btnLandscape = document.getElementById('btn-size-landscape');
+  const btnPortrait = document.getElementById('btn-size-portrait');
+
+  if (isV2) {
+    btnLandscape.style.display = 'none';
+    btnPortrait.style.display = 'none';
     dalleSizeSelecionado = '1024x1024';
     document.querySelectorAll('#dalle-size-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
     document.querySelector('#dalle-size-grid .ton-btn').classList.add('ativo');
+  } else if (isGpt) {
+    btnLandscape.style.display = '';
+    btnPortrait.style.display = '';
+    btnLandscape.setAttribute('onclick', "selecionarDalleSize(this,'1536x1024')");
+    btnPortrait.setAttribute('onclick', "selecionarDalleSize(this,'1024x1536')");
+    // Reset qualidade para high
+    dalleQualitySelecionado = 'high';
+    dalleStyleSelecionado = '';
+    dalleSizeSelecionado = '1024x1024';
+    document.querySelectorAll('#dalle-size-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+    document.querySelector('#dalle-size-grid .ton-btn').classList.add('ativo');
+  } else {
+    // DALL-E 3
+    btnLandscape.style.display = '';
+    btnPortrait.style.display = '';
+    btnLandscape.setAttribute('onclick', "selecionarDalleSize(this,'1792x1024')");
+    btnPortrait.setAttribute('onclick', "selecionarDalleSize(this,'1024x1792')");
+    dalleQualitySelecionado = 'standard';
+    dalleStyleSelecionado = 'vivid';
   }
 }
 
@@ -1708,7 +1752,9 @@ function selecionarDalleSize(el, size) {
 }
 
 function selecionarDalleQuality(el, quality) {
-  document.querySelectorAll('#dalle-quality-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  // Limpa ambos os grids de qualidade
+  const grid = el.closest('.tons-grid');
+  grid.querySelectorAll('.ton-btn').forEach(b => b.classList.remove('ativo'));
   el.classList.add('ativo');
   dalleQualitySelecionado = quality;
 }
