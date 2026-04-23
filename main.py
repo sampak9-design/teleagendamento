@@ -14,6 +14,7 @@ import base64
 import os
 import random
 import uuid
+import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -1165,11 +1166,13 @@ Retorne APENAS o texto do post, sem explicações."""
         post_data["cta_botao"] = cta_botao
         post_data["cta_url"]   = cta_url
 
-    # Gerar imagem se ativado
+    # Gerar imagem se ativado (com timeout de 60s, se falhar envia só texto)
     if gerar_img:
         try:
-            oai_client = get_openai_client(uid)
-            if oai_client:
+            async def _gerar_img():
+                oai_client = get_openai_client(uid)
+                if not oai_client:
+                    return
                 prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
                 if piloto_img_modelo == "gpt-image-1":
                     img_resp = oai_client.images.generate(
@@ -1189,8 +1192,12 @@ Retorne APENAS o texto do post, sem explicações."""
                     img_resp = oai_client.images.generate(**kwargs)
                     post_data["arquivo_url"] = img_resp.data[0].url
                 post_data["tipo"] = "photo"
+
+            await asyncio.wait_for(_gerar_img(), timeout=60)
+        except asyncio.TimeoutError:
+            print(f"[PILOTO IMG TIMEOUT] Imagem demorou mais de 60s, enviando só texto")
         except Exception as e:
-            print(f"[PILOTO IMG ERRO] {e}")
+            print(f"[PILOTO IMG ERRO] {e}, enviando só texto")
 
     db.table("posts_agendados").insert(post_data).execute()
 
