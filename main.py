@@ -172,8 +172,8 @@ def root():
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-async def _enviar_video_note(token: str, chat_id: str, conteudo: bytes) -> dict:
-    """Envia bytes como video note, apaga a mensagem e retorna o file_id."""
+async def _enviar_video_note(token: str, chat_id: str, conteudo: bytes, manter: bool = False) -> dict:
+    """Envia bytes como video note. Se manter=False (padrão) apaga após capturar file_id."""
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
             f"https://api.telegram.org/bot{token}/sendVideoNote",
@@ -186,13 +186,14 @@ async def _enviar_video_note(token: str, chat_id: str, conteudo: bytes) -> dict:
     msg        = data["result"]
     file_id    = msg["video_note"]["file_id"]
     message_id = msg["message_id"]
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(f"https://api.telegram.org/bot{token}/deleteMessage",
-                              json={"chat_id": chat_id, "message_id": message_id})
-    except Exception:
-        pass
-    return {"file_id": file_id}
+    if not manter:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(f"https://api.telegram.org/bot{token}/deleteMessage",
+                                  json={"chat_id": chat_id, "message_id": message_id})
+        except Exception:
+            pass
+    return {"file_id": file_id, "message_id": message_id, "mantido": manter}
 
 
 def _extrair_uid_jwt(jwt_str: str) -> str:
@@ -209,6 +210,7 @@ async def upload_video_note(
     request: Request,
     file: UploadFile = File(...),
     jwt: str = Form(default=""),
+    manter: str = Form(default="false"),
 ):
     uid = _extrair_uid_jwt(jwt) or get_user_id(request)
     if not uid:
@@ -218,7 +220,7 @@ async def upload_video_note(
     if not token or not chat_id:
         raise HTTPException(status_code=400, detail="Configure Bot Token e Chat ID primeiro")
     conteudo = await file.read()
-    return await _enviar_video_note(token, chat_id, conteudo)
+    return await _enviar_video_note(token, chat_id, conteudo, manter=(manter == "true"))
 
 
 @app.post("/upload/video-note-url")
@@ -227,6 +229,7 @@ async def upload_video_note_url(request: Request):
     uid = require_user(request)
     body = await request.json()
     url  = body.get("url", "").strip()
+    manter = bool(body.get("manter", False))
     if not url:
         raise HTTPException(status_code=400, detail="URL obrigatória")
     token   = get_bot_token(uid)
@@ -240,7 +243,7 @@ async def upload_video_note_url(request: Request):
             conteudo = r.content
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao baixar vídeo: {e}")
-    return await _enviar_video_note(token, chat_id, conteudo)
+    return await _enviar_video_note(token, chat_id, conteudo, manter=manter)
 
 
 # ── Telegram ──────────────────────────────────────────────────────
@@ -656,6 +659,47 @@ async def criar_post(request: Request):
 
     print(f"[POST] Agendado para {registro['agendado_para']}: {texto[:50]}")
     return {"status": "ok", "id": result.data[0]["id"]}
+
+
+@app.post("/posts/enviar-agora")
+async def enviar_agora(request: Request):
+    """Envia o post imediatamente (sem agendar) e grava como enviado."""
+    uid  = require_user(request)
+    data = await request.json()
+    texto       = (data.get("texto") or "").strip()
+    tipo        = data.get("tipo", "text")
+    arquivo_url = data.get("arquivo_url") or None
+    chat_id     = data.get("chat_id") or get_chat_id(uid)
+    cta_botao   = data.get("cta_botao") or None
+    cta_url     = data.get("cta_url") or None
+
+    if not texto and not arquivo_url:
+        raise HTTPException(status_code=400, detail="texto ou mídia é obrigatório")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="Configure o Chat ID")
+
+    res = await enviar_telegram(
+        chat_id=chat_id, texto=texto, tipo=tipo, arquivo_url=arquivo_url,
+        cta_botao=cta_botao, cta_url=cta_url, bot_token=get_bot_token(uid),
+    )
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("description", "Erro Telegram"))
+
+    agora_iso = datetime.utcnow().isoformat()
+    db.table("posts_agendados").insert({
+        "user_id":       uid,
+        "texto":         texto,
+        "tipo":          tipo,
+        "arquivo_url":   arquivo_url,
+        "chat_id":       chat_id,
+        "agendado_para": agora_iso,
+        "recorrencia":   "nenhuma",
+        "status":        "enviado",
+        "enviado_em":    agora_iso,
+        "cta_botao":     cta_botao,
+        "cta_url":       cta_url,
+    }).execute()
+    return {"ok": True}
 
 
 @app.delete("/posts/{post_id}")

@@ -600,10 +600,14 @@
           </div>
         </div>
 
-        <div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+        <div style="margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="criarPost()" id="btn-criar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             Agendar Post
+          </button>
+          <button class="btn btn-primary" onclick="enviarAgora()" id="btn-enviar-agora" style="background:#16a34a;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Enviar Agora
           </button>
           <button class="btn btn-ghost" onclick="limparForm()">Limpar</button>
         </div>
@@ -1691,6 +1695,100 @@ async function criarPost() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Agendar Post';
+  }
+}
+
+async function enviarAgora() {
+  const texto = document.getElementById('np-texto').value.trim();
+  const tipo  = document.getElementById('np-tipo').value;
+  let arquivoUrl = '';
+  const inpUrl = document.getElementById('np-arquivo-url');
+  if (inpUrl && inpUrl.offsetParent !== null) arquivoUrl = inpUrl.value.trim();
+  const chatId = document.getElementById('np-chat-id').value.trim();
+
+  const ctaAtivo = document.getElementById('np-cta-track')?.classList.contains('on');
+  let ctaBotao = null, ctaUrl = null;
+  if (ctaAtivo) {
+    const rows = document.querySelectorAll('#np-cta-lista .np-cta-row');
+    const botoes = [];
+    rows.forEach(row => {
+      const txt = row.querySelector('.np-cta-texto').value.trim();
+      const url = row.querySelector('.np-cta-url').value.trim();
+      if (txt && url) botoes.push({texto: txt, url});
+    });
+    if (botoes.length > 0) ctaBotao = JSON.stringify(botoes);
+  }
+
+  if (!texto && tipo !== 'video_note' && !arquivoUrl) {
+    toast('Digite o texto ou anexe uma mídia', 'error'); return;
+  }
+
+  const btn = document.getElementById('btn-enviar-agora');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Enviando...';
+
+  // video_note: upload mantendo o vídeo no canal (não apaga)
+  let fileId = arquivoUrl;
+  if (tipo === 'video_note') {
+    const status = document.getElementById('np-video-note-status');
+    const usandoUrl = document.getElementById('vn-url-group').style.display !== 'none';
+    status.textContent = '⏳ Enviando vídeo...';
+    try {
+      let upResp;
+      if (usandoUrl) {
+        const vnUrl = document.getElementById('np-video-note-url').value.trim();
+        if (!vnUrl) { toast('Cole a URL do vídeo', 'error'); btn.disabled=false; btn.innerHTML='Enviar Agora'; return; }
+        upResp = await authFetch('/upload/video-note-url', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({url: vnUrl, manter: true})
+        });
+      } else {
+        const fileInput = document.getElementById('np-video-note-file');
+        if (!fileInput.files[0]) { toast('Selecione o arquivo de vídeo', 'error'); btn.disabled=false; btn.innerHTML='Enviar Agora'; return; }
+        const s = await supa.auth.getSession();
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        fd.append('jwt', s.data.session.access_token);
+        fd.append('manter', 'true');
+        upResp = await fetch('/upload/video-note', { method: 'POST', body: fd });
+      }
+      const upData = await upResp.json();
+      if (!upResp.ok) {
+        toast('Erro: ' + (upData.detail || 'falha'), 'error');
+        btn.disabled=false; btn.innerHTML='Enviar Agora'; status.textContent=''; return;
+      }
+      status.textContent = '✓ Vídeo enviado';
+      // já está no canal — grava registro como enviado pra ficar no histórico
+      try {
+        await authFetch('/posts/enviar-agora', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({texto: '', tipo: 'video_note', arquivo_url: upData.file_id, chat_id: chatId||null})
+        });
+      } catch(_) {}
+      toast('Enviado!', 'success'); limparForm();
+    } catch(e) {
+      toast('Erro ao enviar vídeo', 'error');
+    } finally {
+      btn.disabled=false;
+      btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar Agora';
+    }
+    return;
+  }
+
+  // Outros tipos: envia direto via /posts/enviar-agora
+  try {
+    const r = await authFetch('/posts/enviar-agora', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({texto, tipo, arquivo_url: fileId||null, chat_id: chatId||null, cta_botao: ctaBotao, cta_url: ctaUrl}),
+    });
+    const d = await r.json();
+    if (r.ok) { toast('Enviado!', 'success'); limparForm(); }
+    else      { toast('Erro: ' + (d.detail||'falha'), 'error'); }
+  } catch(e) {
+    toast('Erro de conexão', 'error');
+  } finally {
+    btn.disabled=false;
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar Agora';
   }
 }
 
