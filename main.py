@@ -630,14 +630,18 @@ async def criar_post(request: Request):
     uid = require_user(request)
     data = await request.json()
     texto = data.get("texto", "").strip()
-    if not texto:
-        raise HTTPException(status_code=400, detail="texto é obrigatório")
+    tipo  = data.get("tipo", "text")
+    arquivo_url = data.get("arquivo_url") or None
+
+    # Texto é obrigatório apenas quando não há mídia
+    if not texto and not arquivo_url:
+        raise HTTPException(status_code=400, detail="texto ou mídia é obrigatório")
 
     registro = {
         "user_id":      uid,
         "texto":        texto,
-        "tipo":         data.get("tipo", "text"),
-        "arquivo_url":  data.get("arquivo_url") or None,
+        "tipo":         tipo,
+        "arquivo_url":  arquivo_url,
         "chat_id":      data.get("chat_id") or get_chat_id(uid),
         "agendado_para": data.get("agendado_para"),
         "recorrencia":  data.get("recorrencia", "nenhuma"),
