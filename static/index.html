@@ -1727,12 +1727,12 @@ async function enviarAgora() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Enviando...';
 
-  // video_note: upload mantendo o vídeo no canal (não apaga)
+  // video_note: faz upload (apaga preview, captura file_id), depois envia via enviar_telegram c/ CTA
   let fileId = arquivoUrl;
   if (tipo === 'video_note') {
     const status = document.getElementById('np-video-note-status');
     const usandoUrl = document.getElementById('vn-url-group').style.display !== 'none';
-    status.textContent = '⏳ Enviando vídeo...';
+    status.textContent = '⏳ Processando vídeo...';
     try {
       let upResp;
       if (usandoUrl) {
@@ -1740,7 +1740,7 @@ async function enviarAgora() {
         if (!vnUrl) { toast('Cole a URL do vídeo', 'error'); btn.disabled=false; btn.innerHTML='Enviar Agora'; return; }
         upResp = await authFetch('/upload/video-note-url', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({url: vnUrl, manter: true})
+          body: JSON.stringify({url: vnUrl})
         });
       } else {
         const fileInput = document.getElementById('np-video-note-file');
@@ -1749,7 +1749,6 @@ async function enviarAgora() {
         const fd = new FormData();
         fd.append('file', fileInput.files[0]);
         fd.append('jwt', s.data.session.access_token);
-        fd.append('manter', 'true');
         upResp = await fetch('/upload/video-note', { method: 'POST', body: fd });
       }
       const upData = await upResp.json();
@@ -1757,22 +1756,14 @@ async function enviarAgora() {
         toast('Erro: ' + (upData.detail || 'falha'), 'error');
         btn.disabled=false; btn.innerHTML='Enviar Agora'; status.textContent=''; return;
       }
-      status.textContent = '✓ Vídeo enviado';
-      // já está no canal (upload com manter=true) — só grava no histórico, não reenvia
-      try {
-        await authFetch('/posts/enviar-agora', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({texto: '', tipo: 'video_note', arquivo_url: upData.file_id, chat_id: chatId||null, ja_enviado: true})
-        });
-      } catch(_) {}
-      toast('Enviado!', 'success'); limparForm();
+      status.textContent = '✓ Vídeo pronto';
+      fileId = upData.file_id;
     } catch(e) {
-      toast('Erro ao enviar vídeo', 'error');
-    } finally {
+      toast('Erro ao processar vídeo', 'error');
       btn.disabled=false;
       btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar Agora';
+      return;
     }
-    return;
   }
 
   // Outros tipos: envia direto via /posts/enviar-agora
