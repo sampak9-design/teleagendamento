@@ -663,7 +663,9 @@ async def criar_post(request: Request):
 
 @app.post("/posts/enviar-agora")
 async def enviar_agora(request: Request):
-    """Envia o post imediatamente (sem agendar) e grava como enviado."""
+    """Envia o post imediatamente (sem agendar) e grava como enviado.
+    Se ja_enviado=true, apenas grava no histórico sem reenviar (usado quando
+    o upload já entregou a mídia ao Telegram)."""
     uid  = require_user(request)
     data = await request.json()
     texto       = (data.get("texto") or "").strip()
@@ -672,18 +674,20 @@ async def enviar_agora(request: Request):
     chat_id     = data.get("chat_id") or get_chat_id(uid)
     cta_botao   = data.get("cta_botao") or None
     cta_url     = data.get("cta_url") or None
+    ja_enviado  = bool(data.get("ja_enviado", False))
 
     if not texto and not arquivo_url:
         raise HTTPException(status_code=400, detail="texto ou mídia é obrigatório")
     if not chat_id:
         raise HTTPException(status_code=400, detail="Configure o Chat ID")
 
-    res = await enviar_telegram(
-        chat_id=chat_id, texto=texto, tipo=tipo, arquivo_url=arquivo_url,
-        cta_botao=cta_botao, cta_url=cta_url, bot_token=get_bot_token(uid),
-    )
-    if not res.get("ok"):
-        raise HTTPException(status_code=400, detail=res.get("description", "Erro Telegram"))
+    if not ja_enviado:
+        res = await enviar_telegram(
+            chat_id=chat_id, texto=texto, tipo=tipo, arquivo_url=arquivo_url,
+            cta_botao=cta_botao, cta_url=cta_url, bot_token=get_bot_token(uid),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("description", "Erro Telegram"))
 
     agora_iso = datetime.utcnow().isoformat()
     db.table("posts_agendados").insert({

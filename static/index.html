@@ -1758,11 +1758,11 @@ async function enviarAgora() {
         btn.disabled=false; btn.innerHTML='Enviar Agora'; status.textContent=''; return;
       }
       status.textContent = '✓ Vídeo enviado';
-      // já está no canal — grava registro como enviado pra ficar no histórico
+      // já está no canal (upload com manter=true) — só grava no histórico, não reenvia
       try {
         await authFetch('/posts/enviar-agora', {
           method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({texto: '', tipo: 'video_note', arquivo_url: upData.file_id, chat_id: chatId||null})
+          body: JSON.stringify({texto: '', tipo: 'video_note', arquivo_url: upData.file_id, chat_id: chatId||null, ja_enviado: true})
         });
       } catch(_) {}
       toast('Enviado!', 'success'); limparForm();
