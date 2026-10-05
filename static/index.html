@@ -627,6 +627,22 @@
             Atualizar
           </button>
         </div>
+        <div style="padding:12px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #1e2235;">
+          <div class="tons-grid" id="posts-filtro-grid" style="margin:0;">
+            <button class="ton-btn ativo" onclick="filtrarPosts(this,'hoje')">Hoje</button>
+            <button class="ton-btn" onclick="filtrarPosts(this,'ontem')">Ontem</button>
+            <button class="ton-btn" onclick="filtrarPosts(this,'semana')">Semana</button>
+            <button class="ton-btn" onclick="filtrarPosts(this,'mes')">Mês</button>
+            <button class="ton-btn" onclick="filtrarPosts(this,'personalizado')">Personalizado</button>
+            <button class="ton-btn" onclick="filtrarPosts(this,'todos')">Todos</button>
+          </div>
+          <div id="posts-filtro-datas" style="display:none;align-items:center;gap:6px;">
+            <input type="date" id="posts-filtro-de" onchange="renderPosts()" style="padding:4px 8px;font-size:0.75rem;width:auto;color-scheme:dark;">
+            <span style="font-size:0.75rem;color:#6b7280;">até</span>
+            <input type="date" id="posts-filtro-ate" onchange="renderPosts()" style="padding:4px 8px;font-size:0.75rem;width:auto;color-scheme:dark;">
+          </div>
+          <span id="posts-filtro-total" style="margin-left:auto;font-size:0.75rem;color:#6b7280;"></span>
+        </div>
         <div id="tabela-posts">
           <div class="empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
@@ -1438,10 +1454,52 @@ async function carregarPosts() {
   }
 }
 
+let postsFiltro = 'hoje';
+
+function filtrarPosts(el, filtro) {
+  document.querySelectorAll('#posts-filtro-grid .ton-btn').forEach(b => b.classList.remove('ativo'));
+  el.classList.add('ativo');
+  postsFiltro = filtro;
+  document.getElementById('posts-filtro-datas').style.display = filtro === 'personalizado' ? 'flex' : 'none';
+  renderPosts();
+}
+
+// Devolve [inicio, fim) do período escolhido, no horário do navegador
+function periodoPosts() {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const dias = n => { const d = new Date(hoje); d.setDate(d.getDate() + n); return d; };
+  if (postsFiltro === 'hoje')  return [hoje, dias(1)];
+  if (postsFiltro === 'ontem') return [dias(-1), hoje];
+  if (postsFiltro === 'semana') {
+    const seg = dias(-((hoje.getDay() + 6) % 7));  // semana de segunda a domingo
+    const fim = new Date(seg); fim.setDate(fim.getDate() + 7);
+    return [seg, fim];
+  }
+  if (postsFiltro === 'mes') {
+    return [new Date(hoje.getFullYear(), hoje.getMonth(), 1), new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)];
+  }
+  if (postsFiltro === 'personalizado') {
+    const de = document.getElementById('posts-filtro-de').value;
+    const ate = document.getElementById('posts-filtro-ate').value;
+    const ini = de ? new Date(de + 'T00:00:00') : null;
+    let fim = ate ? new Date(ate + 'T00:00:00') : null;
+    if (fim) fim.setDate(fim.getDate() + 1);
+    return [ini, fim];
+  }
+  return [null, null];
+}
+
 function renderPosts() {
   const el = document.getElementById('tabela-posts');
-  if (!posts.length) {
-    el.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><p>Nenhum post agendado ainda</p></div>';
+  const [ini, fim] = periodoPosts();
+  const todos = posts;
+  const lista = todos.filter(p => {
+    const d = new Date(p.agendado_para);
+    return (!ini || d >= ini) && (!fim || d < fim);
+  });
+  document.getElementById('posts-filtro-total').textContent = lista.length + ' de ' + todos.length + ' posts';
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><p>' + (todos.length ? 'Nenhum post neste período' : 'Nenhum post agendado ainda') + '</p></div>';
     return;
   }
   el.innerHTML = `
@@ -1457,7 +1515,7 @@ function renderPosts() {
         </tr>
       </thead>
       <tbody>
-        ${posts.map(p => `
+        ${lista.map(p => `
           <tr>
             <td><span class="tipo-icon tipo-${p.tipo}">${tipoEmoji(p.tipo)}</span></td>
             <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(p.texto)}">${esc(p.texto.substring(0,60))}${p.texto.length>60?'…':''}</td>
