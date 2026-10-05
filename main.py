@@ -95,6 +95,23 @@ def set_cfg(chave: str, valor: str, user_id: str = ""):
     if not r.data:
         db.table("configuracoes").insert({"user_id": user_id, "chave": chave, **dados}).execute()
 
+def set_cfgs(user_id: str, valores: dict):
+    """Grava várias configs de uma vez: uma leitura, e só escreve o que mudou."""
+    r = db.table("configuracoes").select("chave,valor").eq("user_id", user_id).execute()
+    atuais = {}
+    for row in (r.data or []):
+        atuais.setdefault(row["chave"], row.get("valor") or "")
+    agora = datetime.utcnow().isoformat()
+    novos = []
+    for chave, valor in valores.items():
+        if chave not in atuais:
+            novos.append({"user_id": user_id, "chave": chave, "valor": valor, "updated_at": agora})
+        elif atuais[chave] != valor:
+            (db.table("configuracoes").update({"valor": valor, "updated_at": agora})
+               .eq("user_id", user_id).eq("chave", chave).execute())
+    if novos:
+        db.table("configuracoes").insert(novos).execute()
+
 def get_bot_token(user_id: str = "") -> str:
     return get_cfg("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN, user_id)
 
@@ -371,11 +388,13 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
 async def verificar_e_enviar_posts():
     try:
         agora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
-        result = (db.table("posts_agendados")
+        result = await asyncio.to_thread(
+            lambda: db.table("posts_agendados")
                     .select("*")
                     .eq("status", "agendado")
                     .lte("agendado_para", agora + ":59")
-                    .execute())
+                    .execute()
+        )
         posts = result.data or []
 
         for post in posts:
@@ -478,7 +497,7 @@ async def salvar_configuracoes(request: Request):
                 raise HTTPException(status_code=400, detail=f"Chave da Anthropic recusada, não foi salva. {motivo or e.message}")
             except anthropic.APIConnectionError:
                 pass  # sem conexão com a Anthropic: salva mesmo assim
-        set_cfg(chave, valor, uid)
+        await asyncio.to_thread(set_cfg, chave, valor, uid)
     return {"status": "ok"}
 
 
@@ -848,14 +867,14 @@ Regras:
 Retorne APENAS o texto do post, sem explicações adicionais."""
 
     try:
-        cliente = get_anthropic_client(uid)
+        cliente = await asyncio.to_thread(get_anthropic_client, uid)
         texto = await asyncio.to_thread(gerar_texto_claude, cliente, prompt)
         resultado = {"texto": texto}
 
         # Gerar imagem se modelo selecionado
         if img_modelo and img_modelo != "false":
             try:
-                oai_client = get_openai_client(uid)
+                oai_client = await asyncio.to_thread(get_openai_client, uid)
                 if oai_client:
                     prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
                     resultado["img_url"] = await asyncio.to_thread(
@@ -873,7 +892,7 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 async def _enriquecer_prompt_imagem(prompt: str, uid: str) -> str:
     """Usa Claude para transformar um prompt simples num prompt rico para geração de imagem."""
     try:
-        ai_client = get_anthropic_client(uid)
+        ai_client = await asyncio.to_thread(get_anthropic_client, uid)
         prompt_ia = f"""You are an expert at writing prompts for AI image generation (GPT Image).
 Transform the following idea into a rich, detailed prompt in English that will produce a stunning, high-quality image.
 
@@ -902,7 +921,7 @@ async def ia_gerar_imagem(request: Request):
 
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt é obrigatório")
-    cliente_oai = get_openai_client(uid)
+    cliente_oai = await asyncio.to_thread(get_openai_client, uid)
     if not cliente_oai:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY não configurada")
 
@@ -998,7 +1017,7 @@ Histórico recente de posts:
 
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
-        cliente = get_anthropic_client(uid)
+        cliente = await asyncio.to_thread(get_anthropic_client, uid)
         texto = await asyncio.to_thread(gerar_texto_claude, cliente, prompt)
         # Remove possível markdown
         if texto.startswith("```"):
@@ -1169,7 +1188,9 @@ def get_analytics(request: Request):
 async def job_piloto_automatico():
     """Roda a cada 15 min: gera e agenda posts para usuários com piloto ativo."""
     try:
-        rows = db.table("configuracoes").select("user_id").eq("chave", "piloto_ativo").eq("valor", "true").execute()
+        rows = await asyncio.to_thread(
+            lambda: db.table("configuracoes").select("user_id").eq("chave", "piloto_ativo").eq("valor", "true").execute()
+        )
         usuarios = [r["user_id"] for r in (rows.data or []) if r.get("user_id")]
         for uid in usuarios:
             await _rodar_piloto(uid)
@@ -1184,7 +1205,7 @@ async def _rodar_piloto(uid: str):
     except Exception as e:
         print(f"[PILOTO ERRO] user {uid}: {e}")
         try:
-            set_cfg("piloto_erro", str(e)[:300], uid)
+            await asyncio.to_thread(set_cfg, "piloto_erro", str(e)[:300], uid)
         except Exception:
             pass
 
@@ -1226,20 +1247,21 @@ def _piloto_situacao(cfgs: dict) -> str:
 
 
 async def _gerar_post_automatico(uid: str, forcar: bool = False):
-    posts_dia   = int(get_cfg("piloto_posts_dia",    "3",   uid))
-    topico      = get_cfg("piloto_topico",           "",    uid)
-    estilo      = get_cfg("piloto_estilo",   "engajador",   uid)
-    piloto_img_modelo = get_cfg("piloto_imagem",   "false",   uid)
+    cfgs        = await asyncio.to_thread(get_cfgs, uid)
+    posts_dia   = int(cfgs.get("piloto_posts_dia") or "3")
+    topico      = cfgs.get("piloto_topico", "")
+    estilo      = cfgs.get("piloto_estilo") or "engajador"
+    piloto_img_modelo = cfgs.get("piloto_imagem") or "false"
     gerar_img   = piloto_img_modelo != "false"
     # Compatibilidade: "true" e DALL-E antigos viram o modelo padrão
     if gerar_img:
         piloto_img_modelo = normalizar_modelo_imagem(piloto_img_modelo)
-    h_inicio    = int(get_cfg("piloto_h_inicio",     "8",   uid))
-    h_fim       = int(get_cfg("piloto_h_fim",       "22",   uid))
-    ultimo      = get_cfg("piloto_ultimo_post",      "",    uid)
-    cta_ativo   = get_cfg("piloto_cta_ativo",    "false",   uid) == "true"
-    cta_botao   = get_cfg("piloto_cta_botao",        "",    uid)
-    cta_url     = get_cfg("piloto_cta_url",          "",    uid)
+    h_inicio    = int(cfgs.get("piloto_h_inicio") or "8")
+    h_fim       = int(cfgs.get("piloto_h_fim") or "22")
+    ultimo      = cfgs.get("piloto_ultimo_post", "")
+    cta_ativo   = cfgs.get("piloto_cta_ativo") == "true"
+    cta_botao   = cfgs.get("piloto_cta_botao", "")
+    cta_url     = cfgs.get("piloto_cta_url", "")
 
     if not topico:
         return
@@ -1264,8 +1286,10 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
 
     # Buscar dados do canal para contexto
     try:
-        canal_rows = (db.table("canal_posts").select("texto,reacoes")
-                      .eq("user_id", uid).order("capturado_em", desc=True).limit(5).execute())
+        canal_rows = await asyncio.to_thread(
+            lambda: db.table("canal_posts").select("texto,reacoes")
+                      .eq("user_id", uid).order("capturado_em", desc=True).limit(5).execute()
+        )
         contexto_canal = "\n".join(
             f"- {r.get('texto','')[:80]} ({r.get('reacoes',0)} reações)"
             for r in (canal_rows.data or [])
@@ -1307,7 +1331,7 @@ Regras:
 - Use um ângulo e abordagem DIFERENTES dos posts recentes acima
 Retorne APENAS o texto do post, sem explicações."""
 
-    ai_client = get_anthropic_client(uid)
+    ai_client = anthropic.Anthropic(api_key=cfgs.get("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY)
     texto = await asyncio.to_thread(gerar_texto_claude, ai_client, prompt)
 
     # Agendar para daqui a 2 minutos
@@ -1315,7 +1339,7 @@ Retorne APENAS o texto do post, sem explicações."""
     post_data = {
         "texto": texto,
         "tipo": "text",
-        "chat_id": get_chat_id(uid),
+        "chat_id": cfgs.get("TELEGRAM_CHAT_ID") or TELEGRAM_CHAT_ID,
         "agendado_para": agendado_para,
         "status": "agendado",
         "user_id": uid,
@@ -1328,7 +1352,7 @@ Retorne APENAS o texto do post, sem explicações."""
     # Gerar imagem se ativado
     if gerar_img:
         try:
-            oai_client = get_openai_client(uid)
+            oai_client = await asyncio.to_thread(get_openai_client, uid)
             if oai_client:
                 prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
                 post_data["arquivo_url"] = await asyncio.to_thread(
@@ -1338,10 +1362,10 @@ Retorne APENAS o texto do post, sem explicações."""
         except Exception as e:
             print(f"[PILOTO IMG ERRO] {e}")
 
-    db.table("posts_agendados").insert(post_data).execute()
+    await asyncio.to_thread(lambda: db.table("posts_agendados").insert(post_data).execute())
 
     # Salvar log de atividade
-    log_atual = get_cfg("piloto_log", "[]", uid)
+    log_atual = cfgs.get("piloto_log") or "[]"
     try:
         log = json.loads(log_atual)
     except Exception:
@@ -1349,10 +1373,11 @@ Retorne APENAS o texto do post, sem explicações."""
     log.insert(0, {"ts": agora.isoformat(), "texto": texto[:120], "imagem": post_data.get("tipo") == "photo"})
     log = log[:20]  # manter só os 20 últimos
 
-    set_cfg("piloto_ultimo_post", agora.isoformat(), uid)
-    set_cfg("piloto_log", json.dumps(log, ensure_ascii=False), uid)
-    if get_cfg("piloto_erro", "", uid):
-        set_cfg("piloto_erro", "", uid)
+    await asyncio.to_thread(set_cfgs, uid, {
+        "piloto_ultimo_post": agora.isoformat(),
+        "piloto_log": json.dumps(log, ensure_ascii=False),
+        "piloto_erro": "",
+    })
     print(f"[PILOTO ✓] Post gerado para user {uid}: {texto[:60]}")
 
 
@@ -1386,25 +1411,25 @@ async def piloto_salvar(request: Request):
     permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
                   "piloto_imagem", "piloto_h_inicio", "piloto_h_fim",
                   "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
-    ligando = str(body.get("piloto_ativo", "")) == "true" and get_cfg("piloto_ativo", "false", uid) != "true"
-    for chave in permitidos:
-        if chave in body:
-            set_cfg(chave, str(body[chave]), uid)
+    valores = {c: str(body[c]) for c in permitidos if c in body}
+    ligando = False
+    if valores.get("piloto_ativo") == "true":
+        ligando = (await asyncio.to_thread(get_cfg, "piloto_ativo", "false", uid)) != "true"
     if ligando:
         # Ao ligar, não espera o intervalo: tenta gerar o primeiro post já
-        set_cfg("piloto_ultimo_post", "", uid)
-        set_cfg("piloto_erro", "", uid)
+        valores.update({"piloto_ultimo_post": "", "piloto_erro": ""})
+    await asyncio.to_thread(set_cfgs, uid, valores)
+    if ligando:
         asyncio.create_task(_rodar_piloto(uid))
-    return {"ok": True}
+    return {"ok": True, "gerando": ligando}
 
 
 @app.post("/piloto/gerar-agora")
 async def piloto_gerar_agora(request: Request):
     uid = require_user(request)
-    if get_cfg("piloto_topico", "", uid) == "":
+    if (await asyncio.to_thread(get_cfg, "piloto_topico", "", uid)) == "":
         raise HTTPException(status_code=400, detail="Configure o tópico do canal primeiro")
-    # Forçar: limpa último post e bypassa verificação de horário
-    set_cfg("piloto_ultimo_post", "", uid)
+    # Forçar: bypassa verificação de horário e de intervalo
     await _gerar_post_automatico(uid, forcar=True)
     return {"ok": True}
 

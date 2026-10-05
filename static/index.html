@@ -2507,14 +2507,18 @@ async function pilotoToggle() {
   pilotoAtivo = !pilotoAtivo;
   _atualizarUIPiloto(pilotoAtivo);
   try {
-    await authFetch('/piloto', {
+    const r = await authFetch('/piloto', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({piloto_ativo: pilotoAtivo ? 'true' : 'false'})
     });
+    const d = await r.json().catch(() => ({}));
     toast(pilotoAtivo ? '🟢 Piloto ligado!' : '⏹ Piloto desligado', pilotoAtivo ? 'success' : '');
     // Ao ligar, o servidor já tenta gerar o primeiro post; atualiza o status em seguida
-    if (pilotoAtivo) setTimeout(carregarPiloto, 10000);
+    if (pilotoAtivo && d.gerando) {
+      document.getElementById('piloto-ultimo-txt').textContent = 'Gerando o primeiro post...';
+      setTimeout(carregarPiloto, 10000);
+    }
   } catch(e) {
     toast('Erro ao salvar status', 'error');
   }
