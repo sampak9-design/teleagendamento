@@ -75,6 +75,18 @@ def get_cfg(chave: str, default: str = "", user_id: str = "") -> str:
         pass
     return default
 
+def get_cfgs(user_id: str) -> dict:
+    """Todas as configs do usuário em uma única consulta: {chave: valor}."""
+    try:
+        r = db.table("configuracoes").select("chave,valor").eq("user_id", user_id).execute()
+        cfgs = {}
+        for row in (r.data or []):
+            if row.get("valor") and row["chave"] not in cfgs:
+                cfgs[row["chave"]] = row["valor"]
+        return cfgs
+    except Exception:
+        return {}
+
 def set_cfg(chave: str, valor: str, user_id: str = ""):
     """Grava config do usuário. Atualiza todas as linhas existentes (pode haver
     duplicadas) e só insere se não existir nenhuma."""
@@ -206,7 +218,7 @@ app.add_middleware(
 
 
 @app.get("/health")
-async def health(request: Request):
+def health(request: Request):
     global _app_url
     if not _app_url:
         _app_url = str(request.base_url).rstrip("/").replace("http://", "https://")
@@ -424,19 +436,20 @@ async def verificar_e_enviar_posts():
 
 # ── Config ────────────────────────────────────────────────────────
 @app.get("/config")
-async def get_config(request: Request):
+def get_config(request: Request):
     uid = get_user_id(request)
     return {"chat_id": get_chat_id(uid)}
 
 
 @app.get("/configuracoes")
-async def listar_configuracoes(request: Request):
+def listar_configuracoes(request: Request):
     uid = require_user(request)
     chaves = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
     resultado = {}
+    cfgs = get_cfgs(uid)
     for chave in chaves:
         # Mostra APENAS o que o usuário salvou, sem fallback para env vars
-        val = get_cfg(chave, "", uid)
+        val = cfgs.get(chave, "")
         if val and len(val) > 12 and chave != "TELEGRAM_CHAT_ID":
             val_display = val[:6] + "..." + val[-4:]
         else:
@@ -617,7 +630,7 @@ async def debug_bot_test(request: Request):
 
 
 @app.get("/debug/webhook-log")
-async def debug_webhook_log(request: Request):
+def debug_webhook_log(request: Request):
     require_user(request)
     return {"total": len(_webhook_log), "updates": _webhook_log[:10]}
 
@@ -656,7 +669,7 @@ async def debug_reacoes(request: Request):
 
 # ── Canal posts ───────────────────────────────────────────────────
 @app.get("/canal/posts")
-async def listar_canal_posts(request: Request):
+def listar_canal_posts(request: Request):
     uid = get_user_id(request)
     try:
         q = db.table("canal_posts").select("*").order("reacoes", desc=True).limit(50)
@@ -670,7 +683,7 @@ async def listar_canal_posts(request: Request):
 
 # ── Posts ─────────────────────────────────────────────────────────
 @app.get("/posts")
-async def listar_posts(request: Request):
+def listar_posts(request: Request):
     uid = require_user(request)
     try:
         result = (db.table("posts_agendados")
@@ -763,7 +776,7 @@ async def enviar_agora(request: Request):
 
 
 @app.delete("/posts/{post_id}")
-async def remover_post(post_id: int, request: Request):
+def remover_post(post_id: int, request: Request):
     uid = require_user(request)
     try:
         db.table("posts_agendados").delete().eq("id", post_id).eq("user_id", uid).execute()
@@ -774,10 +787,10 @@ async def remover_post(post_id: int, request: Request):
 
 # ── Stats ─────────────────────────────────────────────────────────
 @app.get("/stats")
-async def get_stats(request: Request):
+def get_stats(request: Request):
     uid = get_user_id(request)
     try:
-        q = db.table("posts_agendados").select("*")
+        q = db.table("posts_agendados").select("id,status,tipo,texto,agendado_para")
         if uid:
             q = q.eq("user_id", uid)
         result = q.execute()
@@ -1056,7 +1069,7 @@ async def capturar_membros_agora(request: Request):
 
 # ── Relatórios / Analytics ────────────────────────────────────────
 @app.get("/analytics")
-async def get_analytics(request: Request):
+def get_analytics(request: Request):
     uid = require_user(request)
     try:
         from collections import defaultdict
@@ -1182,20 +1195,20 @@ def _piloto_intervalo_horas(posts_dia: int, h_inicio: int, h_fim: int) -> float:
     return janela / max(posts_dia, 1)
 
 
-def _piloto_situacao(uid: str) -> str:
+def _piloto_situacao(cfgs: dict) -> str:
     """Explica em texto por que o piloto vai (ou não) postar agora."""
-    if not get_cfg("piloto_topico", "", uid):
+    if not cfgs.get("piloto_topico"):
         return "Sem tópico configurado: preencha o tópico e salve."
-    erro = get_cfg("piloto_erro", "", uid)
+    erro = cfgs.get("piloto_erro")
     if erro:
         return f"Último erro ao gerar: {erro}"
-    h_inicio = int(get_cfg("piloto_h_inicio", "8", uid))
-    h_fim    = int(get_cfg("piloto_h_fim", "22", uid))
-    posts    = int(get_cfg("piloto_posts_dia", "3", uid))
+    h_inicio = int(cfgs.get("piloto_h_inicio") or "8")
+    h_fim    = int(cfgs.get("piloto_h_fim") or "22")
+    posts    = int(cfgs.get("piloto_posts_dia") or "3")
     agora_br = datetime.utcnow() - timedelta(hours=3)
     if not (h_inicio <= agora_br.hour < h_fim):
         return f"Fora do horário de postagem ({h_inicio}h às {h_fim}h, Brasília)."
-    ultimo = get_cfg("piloto_ultimo_post", "", uid)
+    ultimo = cfgs.get("piloto_ultimo_post")
     if ultimo:
         try:
             proximo = (datetime.fromisoformat(ultimo.replace("Z", "")) - timedelta(hours=3)
@@ -1344,12 +1357,13 @@ Retorne APENAS o texto do post, sem explicações."""
 
 
 @app.get("/piloto")
-async def piloto_status(request: Request):
+def piloto_status(request: Request):
     uid = require_user(request)
     chaves = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
               "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log",
               "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
-    cfg = {c: get_cfg(c, "", uid) for c in chaves}
+    cfgs = get_cfgs(uid)
+    cfg = {c: cfgs.get(c, "") for c in chaves}
     cfg.setdefault("piloto_ativo",     "false")
     cfg.setdefault("piloto_posts_dia", "3")
     cfg.setdefault("piloto_estilo",    "engajador")
@@ -1361,7 +1375,7 @@ async def piloto_status(request: Request):
         cfg["piloto_log"] = json.loads(cfg.get("piloto_log") or "[]")
     except Exception:
         cfg["piloto_log"] = []
-    cfg["piloto_situacao"] = _piloto_situacao(uid)
+    cfg["piloto_situacao"] = _piloto_situacao(cfgs)
     return cfg
 
 
