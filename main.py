@@ -1159,12 +1159,57 @@ async def job_piloto_automatico():
         rows = db.table("configuracoes").select("user_id").eq("chave", "piloto_ativo").eq("valor", "true").execute()
         usuarios = [r["user_id"] for r in (rows.data or []) if r.get("user_id")]
         for uid in usuarios:
-            try:
-                await _gerar_post_automatico(uid)
-            except Exception as e:
-                print(f"[PILOTO ERRO] user {uid}: {e}")
+            await _rodar_piloto(uid)
     except Exception as e:
         print(f"[PILOTO JOB ERRO] {e}")
+
+
+async def _rodar_piloto(uid: str):
+    """Tenta gerar o post do piloto e guarda o último erro para exibir na tela."""
+    try:
+        await _gerar_post_automatico(uid)
+    except Exception as e:
+        print(f"[PILOTO ERRO] user {uid}: {e}")
+        try:
+            set_cfg("piloto_erro", str(e)[:300], uid)
+        except Exception:
+            pass
+
+
+def _piloto_intervalo_horas(posts_dia: int, h_inicio: int, h_fim: int) -> float:
+    """Distribui os posts do dia dentro da janela de horário configurada."""
+    janela = h_fim - h_inicio if h_fim > h_inicio else 24
+    return janela / max(posts_dia, 1)
+
+
+def _piloto_situacao(uid: str) -> str:
+    """Explica em texto por que o piloto vai (ou não) postar agora."""
+    if not get_cfg("piloto_topico", "", uid):
+        return "Sem tópico configurado: preencha o tópico e salve."
+    erro = get_cfg("piloto_erro", "", uid)
+    if erro:
+        return f"Último erro ao gerar: {erro}"
+    h_inicio = int(get_cfg("piloto_h_inicio", "8", uid))
+    h_fim    = int(get_cfg("piloto_h_fim", "22", uid))
+    posts    = int(get_cfg("piloto_posts_dia", "3", uid))
+    agora_br = datetime.utcnow() - timedelta(hours=3)
+    if not (h_inicio <= agora_br.hour < h_fim):
+        return f"Fora do horário de postagem ({h_inicio}h às {h_fim}h, Brasília)."
+    ultimo = get_cfg("piloto_ultimo_post", "", uid)
+    if ultimo:
+        try:
+            proximo = (datetime.fromisoformat(ultimo.replace("Z", "")) - timedelta(hours=3)
+                       + timedelta(hours=_piloto_intervalo_horas(posts, h_inicio, h_fim)))
+            if proximo > agora_br:
+                # Se cair fora da janela, o post fica para a próxima abertura
+                if proximo.hour >= h_fim:
+                    proximo = (proximo + timedelta(days=1)).replace(hour=h_inicio, minute=0)
+                elif proximo.hour < h_inicio:
+                    proximo = proximo.replace(hour=h_inicio, minute=0)
+                return f"Próximo post a partir de {proximo.strftime('%d/%m %H:%M')} (Brasília)."
+        except Exception:
+            pass
+    return "Próximo post em até 15 minutos."
 
 
 async def _gerar_post_automatico(uid: str, forcar: bool = False):
@@ -1195,7 +1240,7 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
             return
 
         # Checar intervalo mínimo entre posts
-        intervalo_horas = 24 / max(posts_dia, 1)
+        intervalo_horas = _piloto_intervalo_horas(posts_dia, h_inicio, h_fim)
         if ultimo:
             try:
                 dt_ultimo = datetime.fromisoformat(ultimo.replace("Z", ""))
@@ -1293,6 +1338,8 @@ Retorne APENAS o texto do post, sem explicações."""
 
     set_cfg("piloto_ultimo_post", agora.isoformat(), uid)
     set_cfg("piloto_log", json.dumps(log, ensure_ascii=False), uid)
+    if get_cfg("piloto_erro", "", uid):
+        set_cfg("piloto_erro", "", uid)
     print(f"[PILOTO ✓] Post gerado para user {uid}: {texto[:60]}")
 
 
@@ -1314,6 +1361,7 @@ async def piloto_status(request: Request):
         cfg["piloto_log"] = json.loads(cfg.get("piloto_log") or "[]")
     except Exception:
         cfg["piloto_log"] = []
+    cfg["piloto_situacao"] = _piloto_situacao(uid)
     return cfg
 
 
@@ -1324,9 +1372,15 @@ async def piloto_salvar(request: Request):
     permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
                   "piloto_imagem", "piloto_h_inicio", "piloto_h_fim",
                   "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
+    ligando = str(body.get("piloto_ativo", "")) == "true" and get_cfg("piloto_ativo", "false", uid) != "true"
     for chave in permitidos:
         if chave in body:
             set_cfg(chave, str(body[chave]), uid)
+    if ligando:
+        # Ao ligar, não espera o intervalo: tenta gerar o primeiro post já
+        set_cfg("piloto_ultimo_post", "", uid)
+        set_cfg("piloto_erro", "", uid)
+        asyncio.create_task(_rodar_piloto(uid))
     return {"ok": True}
 
 

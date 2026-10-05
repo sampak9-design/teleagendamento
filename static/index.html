@@ -2362,11 +2362,14 @@ async function carregarPiloto() {
     document.getElementById('piloto-cta-botao').value = d.piloto_cta_botao || '';
     document.getElementById('piloto-cta-url').value   = d.piloto_cta_url   || '';
 
+    let ultimoTxt = 'Nenhum post gerado ainda';
     if (d.piloto_ultimo_post) {
-      const dt = new Date(d.piloto_ultimo_post);
-      document.getElementById('piloto-ultimo-txt').textContent =
-        'Último post gerado: ' + dt.toLocaleString('pt-BR');
+      // O servidor grava em UTC sem o "Z"
+      const dt = new Date(d.piloto_ultimo_post.replace(/Z$/, '') + 'Z');
+      ultimoTxt = 'Último post gerado: ' + dt.toLocaleString('pt-BR');
     }
+    if (pilotoAtivo && d.piloto_situacao) ultimoTxt += ' · ' + d.piloto_situacao;
+    document.getElementById('piloto-ultimo-txt').textContent = ultimoTxt;
 
     const log = Array.isArray(d.piloto_log) ? d.piloto_log : [];
     _renderLog(log);
@@ -2430,7 +2433,7 @@ function _renderLog(log) {
     return;
   }
   el.innerHTML = log.map(item => {
-    const dt = new Date(item.ts).toLocaleString('pt-BR');
+    const dt = new Date(String(item.ts).replace(/Z$/, '') + 'Z').toLocaleString('pt-BR');
     const img = item.imagem ? '<span style="font-size:.7rem;background:#7c3aed33;color:#a78bfa;padding:2px 6px;border-radius:4px;margin-left:6px;">🖼 imagem</span>' : '';
     return `<div style="padding:10px 0;border-bottom:1px solid #1e2235;display:flex;gap:10px;align-items:flex-start;">
       <div style="min-width:8px;height:8px;border-radius:50%;background:#10b981;margin-top:5px;"></div>
@@ -2452,6 +2455,8 @@ async function pilotoToggle() {
       body: JSON.stringify({piloto_ativo: pilotoAtivo ? 'true' : 'false'})
     });
     toast(pilotoAtivo ? '🟢 Piloto ligado!' : '⏹ Piloto desligado', pilotoAtivo ? 'success' : '');
+    // Ao ligar, o servidor já tenta gerar o primeiro post; atualiza o status em seguida
+    if (pilotoAtivo) setTimeout(carregarPiloto, 10000);
   } catch(e) {
     toast('Erro ao salvar status', 'error');
   }
