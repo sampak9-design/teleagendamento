@@ -2097,7 +2097,8 @@ async function salvarConfiguracoes() {
         if (d.chat_id) document.getElementById('np-chat-id').value = d.chat_id;
       });
     } else {
-      toast('Erro ao salvar', 'error');
+      const d = await r.json().catch(() => ({}));
+      toast(d.detail || 'Erro ao salvar', 'error');
     }
   } catch(e) {
     toast('Erro de conexão', 'error');

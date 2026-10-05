@@ -75,6 +75,14 @@ def get_cfg(chave: str, default: str = "", user_id: str = "") -> str:
         pass
     return default
 
+def set_cfg(chave: str, valor: str, user_id: str = ""):
+    """Grava config do usuário. Atualiza todas as linhas existentes (pode haver
+    duplicadas) e só insere se não existir nenhuma."""
+    dados = {"valor": valor, "updated_at": datetime.utcnow().isoformat()}
+    r = db.table("configuracoes").update(dados).eq("user_id", user_id).eq("chave", chave).execute()
+    if not r.data:
+        db.table("configuracoes").insert({"user_id": user_id, "chave": chave, **dados}).execute()
+
 def get_bot_token(user_id: str = "") -> str:
     return get_cfg("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN, user_id)
 
@@ -447,10 +455,16 @@ async def salvar_configuracoes(request: Request):
             continue
         if not valor or not valor.strip():
             continue
-        db.table("configuracoes").upsert({
-            "user_id": uid, "chave": chave, "valor": valor.strip(),
-            "updated_at": datetime.utcnow().isoformat()
-        }).execute()
+        valor = valor.strip()
+        if chave == "ANTHROPIC_API_KEY":
+            # Testa a chave antes de salvar para não gravar uma chave inválida
+            try:
+                await asyncio.to_thread(anthropic.Anthropic(api_key=valor).models.list, limit=1)
+            except anthropic.APIStatusError as e:
+                raise HTTPException(status_code=400, detail=f"Chave da Anthropic recusada, não foi salva: {e.message}")
+            except anthropic.APIConnectionError:
+                pass  # sem conexão com a Anthropic: salva mesmo assim
+        set_cfg(chave, valor, uid)
     return {"status": "ok"}
 
 
@@ -1276,8 +1290,8 @@ Retorne APENAS o texto do post, sem explicações."""
     log.insert(0, {"ts": agora.isoformat(), "texto": texto[:120], "imagem": post_data.get("tipo") == "photo"})
     log = log[:20]  # manter só os 20 últimos
 
-    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_ultimo_post", "valor": agora.isoformat()}).execute()
-    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_log", "valor": json.dumps(log, ensure_ascii=False)}).execute()
+    set_cfg("piloto_ultimo_post", agora.isoformat(), uid)
+    set_cfg("piloto_log", json.dumps(log, ensure_ascii=False), uid)
     print(f"[PILOTO ✓] Post gerado para user {uid}: {texto[:60]}")
 
 
@@ -1311,9 +1325,7 @@ async def piloto_salvar(request: Request):
                   "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
     for chave in permitidos:
         if chave in body:
-            db.table("configuracoes").upsert(
-                {"user_id": uid, "chave": chave, "valor": str(body[chave])}
-            ).execute()
+            set_cfg(chave, str(body[chave]), uid)
     return {"ok": True}
 
 
@@ -1323,7 +1335,7 @@ async def piloto_gerar_agora(request: Request):
     if get_cfg("piloto_topico", "", uid) == "":
         raise HTTPException(status_code=400, detail="Configure o tópico do canal primeiro")
     # Forçar: limpa último post e bypassa verificação de horário
-    db.table("configuracoes").upsert({"user_id": uid, "chave": "piloto_ultimo_post", "valor": ""}).execute()
+    set_cfg("piloto_ultimo_post", "", uid)
     await _gerar_post_automatico(uid, forcar=True)
     return {"ok": True}
 
