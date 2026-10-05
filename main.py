@@ -25,6 +25,10 @@ SUPABASE_KEY       = os.environ["SUPABASE_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 ANTHROPIC_API_KEY  = os.environ["ANTHROPIC_API_KEY"]
+CLAUDE_MODEL       = "claude-sonnet-5-5"
+# DALL-E 2 e 3 foram desligados pela OpenAI em 12/05/2026
+IMG_MODELOS        = ("gpt-image-2.5-flare", "gpt-image-1")
+IMG_MODELO_PADRAO  = IMG_MODELOS[0]
 OPENAI_API_KEY     = os.environ.get("OPENAI_API_KEY", "")
 
 db        = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -84,6 +88,43 @@ def get_anthropic_client(user_id: str = ""):
 def get_openai_client(user_id: str = ""):
     key = get_cfg("OPENAI_API_KEY", OPENAI_API_KEY, user_id)
     return openai.OpenAI(api_key=key) if key else None
+
+def normalizar_modelo_imagem(modelo: str) -> str:
+    """Modelos antigos (DALL-E, "true") caem no modelo padrão atual."""
+    return modelo if modelo in IMG_MODELOS else IMG_MODELO_PADRAO
+
+def gerar_imagem_arquivo(oai_client, modelo: str, prompt: str,
+                         size: str = "1024x1024", quality: str = "high") -> str:
+    """Gera a imagem na OpenAI, salva em static/generated e devolve a URL local."""
+    if size not in ("1024x1024", "1536x1024", "1024x1536"):
+        size = "1024x1024"
+    if quality not in ("low", "medium", "high", "auto"):
+        quality = "high"
+    resp = oai_client.images.generate(
+        model=normalizar_modelo_imagem(modelo), prompt=prompt,
+        size=size, quality=quality, n=1
+    )
+    filename = f"{uuid.uuid4().hex}.png"
+    filepath = os.path.join("static", "generated", filename)
+    with open(filepath, "wb") as f:
+        f.write(base64.b64decode(resp.data[0].b64_json))
+    return f"/static/generated/{filename}"
+
+def gerar_texto_claude(cliente, prompt: str, max_tokens: int = 4000) -> str:
+    """Chama o Claude e devolve só o texto da resposta."""
+    msg = cliente.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=max_tokens,
+        output_config={"effort": "low"},
+        messages=[{"role": "user", "content": prompt}]
+    )
+    if msg.stop_reason == "refusal":
+        raise RuntimeError("A IA recusou gerar este conteúdo. Tente reformular o pedido.")
+    # A resposta pode começar com blocos de raciocínio; pega apenas os de texto
+    texto = "".join(b.text for b in msg.content if b.type == "text").strip()
+    if not texto:
+        raise RuntimeError("A IA não retornou texto. Tente novamente.")
+    return texto
 
 # URL pública do Railway (disponível como env var)
 _railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
@@ -780,13 +821,7 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 
     try:
         cliente = get_anthropic_client(uid)
-        msg = await asyncio.to_thread(
-            cliente.messages.create,
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        texto = msg.content[0].text
+        texto = await asyncio.to_thread(gerar_texto_claude, cliente, prompt)
         resultado = {"texto": texto}
 
         # Gerar imagem se modelo selecionado
@@ -794,26 +829,10 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
             try:
                 oai_client = get_openai_client(uid)
                 if oai_client:
-                    if img_modelo == "gpt-image-1":
-                        prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
-                        img_resp = await asyncio.to_thread(
-                            oai_client.images.generate,
-                            model="gpt-image-1", prompt=prompt_img,
-                            size="1024x1024", quality="high", n=1
-                        )
-                        img_b64 = img_resp.data[0].b64_json
-                        filename = f"{uuid.uuid4().hex}.png"
-                        filepath = os.path.join("static", "generated", filename)
-                        with open(filepath, "wb") as f:
-                            f.write(base64.b64decode(img_b64))
-                        resultado["img_url"] = f"/static/generated/{filename}"
-                    else:
-                        prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
-                        kwargs = {"model": img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
-                        if img_modelo == "dall-e-3":
-                            kwargs["quality"] = "standard"
-                        img_resp = await asyncio.to_thread(oai_client.images.generate, **kwargs)
-                        resultado["img_url"] = img_resp.data[0].url
+                    prompt_img = await _enriquecer_prompt_imagem(f"{tema}: {texto[:200]}", uid)
+                    resultado["img_url"] = await asyncio.to_thread(
+                        gerar_imagem_arquivo, oai_client, img_modelo, prompt_img
+                    )
             except Exception as e:
                 print(f"[IA GERAR IMG ERRO] {e}")
 
@@ -822,16 +841,12 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── IA: Gerar imagem (DALL-E / GPT Image) ──────────────────────────
+# ── IA: Gerar imagem (GPT Image) ──────────────────────────
 async def _enriquecer_prompt_imagem(prompt: str, uid: str) -> str:
     """Usa Claude para transformar um prompt simples num prompt rico para geração de imagem."""
     try:
         ai_client = get_anthropic_client(uid)
-        msg = await asyncio.to_thread(
-            ai_client.messages.create,
-            model="claude-sonnet-4-6",
-            max_tokens=400,
-            messages=[{"role": "user", "content": f"""You are an expert at writing prompts for AI image generation (DALL-E 3, GPT Image 1).
+        prompt_ia = f"""You are an expert at writing prompts for AI image generation (GPT Image).
 Transform the following idea into a rich, detailed prompt in English that will produce a stunning, high-quality image.
 
 Idea: {prompt}
@@ -842,9 +857,8 @@ Rules:
 - Do NOT include any text, words, letters, or typography in the image
 - The image must be purely visual, no written content at all
 - Do NOT include any explanation — return ONLY the final prompt
-- Maximum 400 characters"""}]
-        )
-        return msg.content[0].text.strip()
+- Maximum 400 characters"""
+        return await asyncio.to_thread(gerar_texto_claude, ai_client, prompt_ia)
     except Exception:
         return prompt + ". Do not include any text, words or letters in the image."
 
@@ -854,10 +868,9 @@ async def ia_gerar_imagem(request: Request):
     uid     = require_user(request)
     data    = await request.json()
     prompt  = data.get("prompt", "").strip()
-    model   = data.get("model", "dall-e-3")
+    model   = data.get("model", IMG_MODELO_PADRAO)
     size    = data.get("size", "1024x1024")
-    quality = data.get("quality", "standard")
-    style   = data.get("style", "vivid")
+    quality = data.get("quality", "high")
 
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt é obrigatório")
@@ -868,24 +881,10 @@ async def ia_gerar_imagem(request: Request):
     try:
         prompt_enriquecido = await _enriquecer_prompt_imagem(prompt, uid)
 
-        if model == "gpt-image-1":
-            kwargs = {"model": "gpt-image-1", "prompt": prompt_enriquecido, "size": size, "n": 1, "quality": quality}
-            resp = await asyncio.to_thread(cliente_oai.images.generate, **kwargs)
-            img_b64 = resp.data[0].b64_json
-            # Salvar em arquivo para servir via URL
-            filename = f"{uuid.uuid4().hex}.png"
-            filepath = os.path.join("static", "generated", filename)
-            with open(filepath, "wb") as f:
-                f.write(base64.b64decode(img_b64))
-            url = f"/static/generated/{filename}"
-            return {"url": url, "revised_prompt": None, "prompt_usado": prompt_enriquecido}
-        else:
-            kwargs = {"model": model, "prompt": prompt_enriquecido, "size": size, "n": 1}
-            if model == "dall-e-3":
-                kwargs["quality"] = quality
-                kwargs["style"] = style
-            resp = await asyncio.to_thread(cliente_oai.images.generate, **kwargs)
-            return {"url": resp.data[0].url, "revised_prompt": resp.data[0].revised_prompt, "prompt_usado": prompt_enriquecido}
+        url = await asyncio.to_thread(
+            gerar_imagem_arquivo, cliente_oai, model, prompt_enriquecido, size, quality
+        )
+        return {"url": url, "revised_prompt": None, "prompt_usado": prompt_enriquecido}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -972,13 +971,7 @@ Histórico recente de posts:
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
         cliente = get_anthropic_client(uid)
-        msg = await asyncio.to_thread(
-            cliente.messages.create,
-            model="claude-sonnet-4-6",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        texto = msg.content[0].text.strip()
+        texto = await asyncio.to_thread(gerar_texto_claude, cliente, prompt)
         # Remove possível markdown
         if texto.startswith("```"):
             texto = texto.split("```")[1]
@@ -1165,9 +1158,9 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     estilo      = get_cfg("piloto_estilo",   "engajador",   uid)
     piloto_img_modelo = get_cfg("piloto_imagem",   "false",   uid)
     gerar_img   = piloto_img_modelo != "false"
-    # Compatibilidade: "true" antigo vira "dall-e-3"
-    if piloto_img_modelo == "true":
-        piloto_img_modelo = "dall-e-3"
+    # Compatibilidade: "true" e DALL-E antigos viram o modelo padrão
+    if gerar_img:
+        piloto_img_modelo = normalizar_modelo_imagem(piloto_img_modelo)
     h_inicio    = int(get_cfg("piloto_h_inicio",     "8",   uid))
     h_fim       = int(get_cfg("piloto_h_fim",       "22",   uid))
     ultimo      = get_cfg("piloto_ultimo_post",      "",    uid)
@@ -1242,13 +1235,7 @@ Regras:
 Retorne APENAS o texto do post, sem explicações."""
 
     ai_client = get_anthropic_client(uid)
-    msg = await asyncio.to_thread(
-        ai_client.messages.create,
-        model="claude-sonnet-4-6",
-        max_tokens=300,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    texto = msg.content[0].text.strip()
+    texto = await asyncio.to_thread(gerar_texto_claude, ai_client, prompt)
 
     # Agendar para daqui a 2 minutos
     agendado_para = (agora + timedelta(minutes=2)).isoformat()
@@ -1270,26 +1257,10 @@ Retorne APENAS o texto do post, sem explicações."""
         try:
             oai_client = get_openai_client(uid)
             if oai_client:
-                if piloto_img_modelo == "gpt-image-1":
-                    prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
-                    img_resp = await asyncio.to_thread(
-                        oai_client.images.generate,
-                        model="gpt-image-1", prompt=prompt_img,
-                        size="1024x1024", quality="high", n=1
-                    )
-                    img_b64 = img_resp.data[0].b64_json
-                    filename = f"{uuid.uuid4().hex}.png"
-                    filepath = os.path.join("static", "generated", filename)
-                    with open(filepath, "wb") as f:
-                        f.write(base64.b64decode(img_b64))
-                    post_data["arquivo_url"] = f"/static/generated/{filename}"
-                else:
-                    prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
-                    kwargs = {"model": piloto_img_modelo, "prompt": prompt_img, "size": "1024x1024", "n": 1}
-                    if piloto_img_modelo == "dall-e-3":
-                        kwargs["quality"] = "standard"
-                    img_resp = await asyncio.to_thread(oai_client.images.generate, **kwargs)
-                    post_data["arquivo_url"] = img_resp.data[0].url
+                prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
+                post_data["arquivo_url"] = await asyncio.to_thread(
+                    gerar_imagem_arquivo, oai_client, piloto_img_modelo, prompt_img
+                )
                 post_data["tipo"] = "photo"
         except Exception as e:
             print(f"[PILOTO IMG ERRO] {e}")
