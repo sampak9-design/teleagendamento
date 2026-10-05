@@ -461,7 +461,8 @@ async def salvar_configuracoes(request: Request):
             try:
                 await asyncio.to_thread(anthropic.Anthropic(api_key=valor).models.list, limit=1)
             except anthropic.APIStatusError as e:
-                raise HTTPException(status_code=400, detail=f"Chave da Anthropic recusada, não foi salva: {e.message}")
+                motivo = e.body.get("error", {}).get("message", "") if isinstance(e.body, dict) else ""
+                raise HTTPException(status_code=400, detail=f"Chave da Anthropic recusada, não foi salva. {motivo or e.message}")
             except anthropic.APIConnectionError:
                 pass  # sem conexão com a Anthropic: salva mesmo assim
         set_cfg(chave, valor, uid)
