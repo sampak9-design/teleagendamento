@@ -212,7 +212,9 @@ async def auto_registrar_webhook():
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler.add_job(verificar_e_enviar_posts,  "interval", minutes=1,  id="check_posts")
-    scheduler.add_job(job_piloto_automatico,     "interval", minutes=15, id="piloto_auto")
+    # Primeira rodada logo após subir: um restart/deploy não pode adiar o piloto
+    scheduler.add_job(job_piloto_automatico,     "interval", minutes=5,  id="piloto_auto",
+                      next_run_time=datetime.now() + timedelta(seconds=20))
     scheduler.add_job(job_capturar_membros,      "interval", hours=1,    id="capturar_membros")
     scheduler.add_job(job_keepalive,             "interval", minutes=4,  id="keepalive")
     scheduler.start()
@@ -1186,7 +1188,7 @@ def get_analytics(request: Request):
 # ── Piloto Automático ─────────────────────────────────────────────
 
 async def job_piloto_automatico():
-    """Roda a cada 15 min: gera e agenda posts para usuários com piloto ativo."""
+    """Roda a cada 5 min: gera e agenda posts para usuários com piloto ativo."""
     try:
         rows = await asyncio.to_thread(
             lambda: db.table("configuracoes").select("user_id").eq("chave", "piloto_ativo").eq("valor", "true").execute()
@@ -1198,8 +1200,13 @@ async def job_piloto_automatico():
         print(f"[PILOTO JOB ERRO] {e}")
 
 
+_piloto_em_andamento: set = set()
+
 async def _rodar_piloto(uid: str):
     """Tenta gerar o post do piloto e guarda o último erro para exibir na tela."""
+    if uid in _piloto_em_andamento:
+        return  # já há uma geração em curso para este usuário
+    _piloto_em_andamento.add(uid)
     try:
         await _gerar_post_automatico(uid)
     except Exception as e:
@@ -1208,6 +1215,8 @@ async def _rodar_piloto(uid: str):
             await asyncio.to_thread(set_cfg, "piloto_erro", str(e)[:300], uid)
         except Exception:
             pass
+    finally:
+        _piloto_em_andamento.discard(uid)
 
 
 def _piloto_intervalo_horas(posts_dia: int, h_inicio: int, h_fim: int) -> float:
@@ -1243,7 +1252,7 @@ def _piloto_situacao(cfgs: dict) -> str:
                 return f"Próximo post a partir de {proximo.strftime('%d/%m %H:%M')} (Brasília)."
         except Exception:
             pass
-    return "Próximo post em até 15 minutos."
+    return "Próximo post em até 5 minutos."
 
 
 async def _gerar_post_automatico(uid: str, forcar: bool = False):
