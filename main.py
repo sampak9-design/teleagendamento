@@ -1189,8 +1189,8 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     agora = datetime.utcnow()
 
     if not forcar:
-        # Checar horário (UTC)
-        hora_local = agora.hour
+        # Checar horário (Brasília, UTC-3 fixo: o Brasil não tem horário de verão)
+        hora_local = (agora - timedelta(hours=3)).hour
         if not (h_inicio <= hora_local < h_fim):
             return
 
