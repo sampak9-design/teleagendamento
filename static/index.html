@@ -1160,6 +1160,11 @@
               <input type="number" id="piloto-h-fim" class="form-control" min="1" max="24" value="22">
             </div>
           </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label class="form-label">Como quero as artes</label>
+            <textarea id="piloto-arte-estilo" class="form-control" rows="4" maxlength="1500" placeholder="Descreva o visual das imagens. Ex: ilustração 3D moderna, fundo escuro com detalhes em verde neon, celular mostrando um gráfico subindo, clima profissional e tecnológico. Com um título curto em português em destaque."></textarea>
+            <span style="font-size:0.7rem;color:#4a5568;">Usado em toda imagem gerada pelo piloto. Diga estilo, cores, elementos e se quer texto na arte. Em branco, a IA escolhe sozinha.</span>
+          </div>
           <!-- CTA Button -->
           <div style="margin-top:14px;padding:12px;background:#0d1117;border-radius:8px;border:1px solid #2d3347;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -2419,6 +2424,7 @@ async function carregarPiloto() {
     _atualizarUICTA(ctaAtivo);
     document.getElementById('piloto-cta-botao').value = d.piloto_cta_botao || '';
     document.getElementById('piloto-cta-url').value   = d.piloto_cta_url   || '';
+    document.getElementById('piloto-arte-estilo').value = d.piloto_arte_estilo || '';
 
     let ultimoTxt = 'Nenhum post gerado ainda';
     if (d.piloto_ultimo_post) {
@@ -2538,6 +2544,7 @@ async function pilotoSalvar() {
       piloto_cta_ativo: document.getElementById('cta-toggle-track').classList.contains('on') ? 'true' : 'false',
       piloto_cta_botao: document.getElementById('piloto-cta-botao').value.trim(),
       piloto_cta_url:   document.getElementById('piloto-cta-url').value.trim(),
+      piloto_arte_estilo: document.getElementById('piloto-arte-estilo').value.trim(),
     };
     if (!body.piloto_topico) { toast('Informe o tópico do canal', 'error'); return; }
     if (body.piloto_cta_ativo === 'true' && (!body.piloto_cta_botao || !body.piloto_cta_url)) {

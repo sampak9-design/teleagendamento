@@ -891,11 +891,32 @@ Retorne APENAS o texto do post, sem explicações adicionais."""
 
 
 # ── IA: Gerar imagem (GPT Image) ──────────────────────────
-async def _enriquecer_prompt_imagem(prompt: str, uid: str) -> str:
-    """Usa Claude para transformar um prompt simples num prompt rico para geração de imagem."""
+async def _enriquecer_prompt_imagem(prompt: str, uid: str, direcao_arte: str = "") -> str:
+    """Usa Claude para transformar um prompt simples num prompt rico para geração de imagem.
+    direcao_arte: texto livre do usuário dizendo como quer as artes (tem prioridade)."""
     try:
         ai_client = await asyncio.to_thread(get_anthropic_client, uid)
-        prompt_ia = f"""You are an expert at writing prompts for AI image generation (GPT Image).
+        if direcao_arte:
+            prompt_ia = f"""You are an expert at writing prompts for AI image generation (GPT Image).
+Write a rich, detailed prompt in English for the image that will illustrate the post below.
+
+Post subject: {prompt}
+
+Art direction written by the channel owner (may be in Portuguese). Follow it strictly — it defines
+the visual style, colors, elements and mood, and it overrides your own preferences:
+<art_direction>
+{direcao_arte}
+</art_direction>
+
+Rules:
+- Write the prompt in English, but keep any text that must appear in the image in its original language
+- Make the image specific to this post's subject, inside the owner's art direction
+- Describe style, lighting, composition, colors and mood concretely
+- Only include text, words or typography in the image if the art direction asks for it; otherwise no text at all
+- Do NOT include any explanation — return ONLY the final prompt
+- Maximum 900 characters"""
+        else:
+            prompt_ia = f"""You are an expert at writing prompts for AI image generation (GPT Image).
 Transform the following idea into a rich, detailed prompt in English that will produce a stunning, high-quality image.
 
 Idea: {prompt}
@@ -909,6 +930,8 @@ Rules:
 - Maximum 400 characters"""
         return await asyncio.to_thread(gerar_texto_claude, ai_client, prompt_ia)
     except Exception:
+        if direcao_arte:
+            return f"{prompt}. Art direction: {direcao_arte}"
         return prompt + ". Do not include any text, words or letters in the image."
 
 
@@ -1271,6 +1294,7 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     cta_ativo   = cfgs.get("piloto_cta_ativo") == "true"
     cta_botao   = cfgs.get("piloto_cta_botao", "")
     cta_url     = cfgs.get("piloto_cta_url", "")
+    arte_estilo = cfgs.get("piloto_arte_estilo", "")
 
     if not topico:
         return
@@ -1363,7 +1387,9 @@ Retorne APENAS o texto do post, sem explicações."""
         try:
             oai_client = await asyncio.to_thread(get_openai_client, uid)
             if oai_client:
-                prompt_img = await _enriquecer_prompt_imagem(f"{topico}: {texto[:200]}", uid)
+                # Com direção de arte, o assunto da imagem é o post em si, não o tópico inteiro
+                assunto_img = texto[:400] if arte_estilo else f"{topico}: {texto[:200]}"
+                prompt_img = await _enriquecer_prompt_imagem(assunto_img, uid, arte_estilo)
                 post_data["arquivo_url"] = await asyncio.to_thread(
                     gerar_imagem_arquivo, oai_client, piloto_img_modelo, prompt_img
                 )
@@ -1395,7 +1421,7 @@ def piloto_status(request: Request):
     uid = require_user(request)
     chaves = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
               "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log",
-              "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
+              "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_arte_estilo"]
     cfgs = get_cfgs(uid)
     cfg = {c: cfgs.get(c, "") for c in chaves}
     cfg.setdefault("piloto_ativo",     "false")
@@ -1419,7 +1445,7 @@ async def piloto_salvar(request: Request):
     body = await request.json()
     permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
                   "piloto_imagem", "piloto_h_inicio", "piloto_h_fim",
-                  "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url"]
+                  "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_arte_estilo"]
     valores = {c: str(body[c]) for c in permitidos if c in body}
     ligando = False
     if valores.get("piloto_ativo") == "true":
