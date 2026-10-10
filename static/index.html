@@ -568,21 +568,45 @@
                   <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">1</span>
                   <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
                   <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                  <select class="np-cta-cor" style="flex:.8;" title="Cor do botão">
+                    <option value="">Cor padrão</option>
+                    <option value="primary">🔵 Azul</option>
+                    <option value="success">🟢 Verde</option>
+                    <option value="danger">🔴 Vermelho</option>
+                  </select>
                 </div>
                 <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
                   <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">2</span>
                   <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
                   <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                  <select class="np-cta-cor" style="flex:.8;" title="Cor do botão">
+                    <option value="">Cor padrão</option>
+                    <option value="primary">🔵 Azul</option>
+                    <option value="success">🟢 Verde</option>
+                    <option value="danger">🔴 Vermelho</option>
+                  </select>
                 </div>
                 <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
                   <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">3</span>
                   <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
                   <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                  <select class="np-cta-cor" style="flex:.8;" title="Cor do botão">
+                    <option value="">Cor padrão</option>
+                    <option value="primary">🔵 Azul</option>
+                    <option value="success">🟢 Verde</option>
+                    <option value="danger">🔴 Vermelho</option>
+                  </select>
                 </div>
                 <div class="np-cta-row" style="display:flex;gap:6px;align-items:center;">
                   <span style="color:#6b7280;font-size:.75rem;width:18px;flex-shrink:0;">4</span>
                   <input type="text" placeholder="Texto do botão" style="flex:1;" class="np-cta-texto">
                   <input type="url" placeholder="https://..." style="flex:1.5;" class="np-cta-url">
+                  <select class="np-cta-cor" style="flex:.8;" title="Cor do botão">
+                    <option value="">Cor padrão</option>
+                    <option value="primary">🔵 Azul</option>
+                    <option value="success">🟢 Verde</option>
+                    <option value="danger">🔴 Vermelho</option>
+                  </select>
                 </div>
               </div>
               <p style="font-size:.72rem;color:#4a5568;margin-top:6px;">Deixe em branco os botões que não quiser usar.</p>
@@ -1187,6 +1211,15 @@
                 <label class="form-label">URL do Botão</label>
                 <input type="url" id="piloto-cta-url" class="form-control" placeholder="https://...">
               </div>
+              <div class="form-group" style="margin-top:8px;">
+                <label class="form-label">Cor do Botão</label>
+                <select id="piloto-cta-cor" class="form-control">
+                  <option value="">Cor padrão</option>
+                  <option value="primary">🔵 Azul</option>
+                  <option value="success">🟢 Verde</option>
+                  <option value="danger">🔴 Vermelho</option>
+                </select>
+              </div>
             </div>
           </div>
           <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="pilotoSalvar()" id="btn-piloto-salvar">
@@ -1646,7 +1679,7 @@ function limparForm() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  document.querySelectorAll('#np-cta-lista .np-cta-texto, #np-cta-lista .np-cta-url').forEach(el => el.value = '');
+  document.querySelectorAll('#np-cta-lista .np-cta-texto, #np-cta-lista .np-cta-url, #np-cta-lista .np-cta-cor').forEach(el => el.value = '');
   const track = document.getElementById('np-cta-track');
   if (track) { track.classList.remove('on'); document.getElementById('np-cta-label').textContent = 'Desativado'; document.getElementById('np-cta-fields').style.display = 'none'; }
   document.getElementById('np-tipo').value = 'text';
@@ -1669,7 +1702,8 @@ async function criarPost() {
     rows.forEach(row => {
       const txt = row.querySelector('.np-cta-texto').value.trim();
       const url = row.querySelector('.np-cta-url').value.trim();
-      if (txt && url) botoes.push({texto: txt, url});
+      const cor = row.querySelector('.np-cta-cor').value;
+      if (txt && url) botoes.push(cor ? {texto: txt, url, cor} : {texto: txt, url});
     });
     if (botoes.length > 0) ctaBotao = JSON.stringify(botoes);
   }
@@ -1755,7 +1789,8 @@ async function enviarAgora() {
     rows.forEach(row => {
       const txt = row.querySelector('.np-cta-texto').value.trim();
       const url = row.querySelector('.np-cta-url').value.trim();
-      if (txt && url) botoes.push({texto: txt, url});
+      const cor = row.querySelector('.np-cta-cor').value;
+      if (txt && url) botoes.push(cor ? {texto: txt, url, cor} : {texto: txt, url});
     });
     if (botoes.length > 0) ctaBotao = JSON.stringify(botoes);
   }
@@ -2424,6 +2459,7 @@ async function carregarPiloto() {
     _atualizarUICTA(ctaAtivo);
     document.getElementById('piloto-cta-botao').value = d.piloto_cta_botao || '';
     document.getElementById('piloto-cta-url').value   = d.piloto_cta_url   || '';
+    document.getElementById('piloto-cta-cor').value   = d.piloto_cta_cor   || '';
     document.getElementById('piloto-arte-estilo').value = d.piloto_arte_estilo || '';
 
     let ultimoTxt = 'Nenhum post gerado ainda';
@@ -2544,6 +2580,7 @@ async function pilotoSalvar() {
       piloto_cta_ativo: document.getElementById('cta-toggle-track').classList.contains('on') ? 'true' : 'false',
       piloto_cta_botao: document.getElementById('piloto-cta-botao').value.trim(),
       piloto_cta_url:   document.getElementById('piloto-cta-url').value.trim(),
+      piloto_cta_cor:   document.getElementById('piloto-cta-cor').value,
       piloto_arte_estilo: document.getElementById('piloto-arte-estilo').value.trim(),
     };
     if (!body.piloto_topico) { toast('Informe o tópico do canal', 'error'); return; }

@@ -327,9 +327,32 @@ async def upload_video_note_url(request: Request):
 
 
 # ── Telegram ──────────────────────────────────────────────────────
+# Cores de botão aceitas pelo Telegram (Bot API 9.4+): azul, verde e vermelho
+CTA_CORES = ("primary", "success", "danger")
+
+def _botao_cta(texto: str, url: str, cor: str = "") -> dict:
+    botao = {"text": texto, "url": url}
+    if cor in CTA_CORES:
+        botao["style"] = cor
+    return botao
+
+def _markup_sem_cor(markup: dict) -> dict:
+    return {"inline_keyboard": [[{k: v for k, v in b.items() if k != "style"} for b in linha]
+                                for linha in markup["inline_keyboard"]]}
+
 async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
                           arquivo_url: str = None, cta_botao: str = None, cta_url: str = None,
                           bot_token: str = None):
+    res = await _enviar_telegram(chat_id, texto, tipo, arquivo_url, cta_botao, cta_url, bot_token)
+    # Se o Telegram recusar o envio com botão colorido, reenvia com a cor padrão
+    if not res.get("ok") and res.get("error_code") == 400 and '"cor"' in (cta_botao or ""):
+        print(f"[CTA COR] recusado, reenviando sem cor: {res.get('description')}")
+        res = await _enviar_telegram(chat_id, texto, tipo, arquivo_url, cta_botao, cta_url, bot_token, sem_cor=True)
+    return res
+
+async def _enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
+                          arquivo_url: str = None, cta_botao: str = None, cta_url: str = None,
+                          bot_token: str = None, sem_cor: bool = False):
     token = bot_token or get_bot_token()
     base  = f"https://api.telegram.org/bot{token}"
 
@@ -338,7 +361,7 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
         try:
             botoes = json.loads(cta_botao)
             if isinstance(botoes, list):
-                rows = [[{"text": b["texto"], "url": b["url"]}] for b in botoes if b.get("texto") and b.get("url")]
+                rows = [[_botao_cta(b["texto"], b["url"], b.get("cor", ""))] for b in botoes if b.get("texto") and b.get("url")]
                 if rows:
                     markup = {"inline_keyboard": rows}
             else:
@@ -347,6 +370,8 @@ async def enviar_telegram(chat_id: str, texto: str, tipo: str = "text",
             # formato legado: cta_botao=texto simples, cta_url=url
             if cta_url:
                 markup = {"inline_keyboard": [[{"text": cta_botao, "url": cta_url}]]}
+    if markup and sem_cor:
+        markup = _markup_sem_cor(markup)
 
     async with httpx.AsyncClient(timeout=120) as client:
         if tipo == "photo" and arquivo_url:
@@ -1294,6 +1319,7 @@ async def _gerar_post_automatico(uid: str, forcar: bool = False):
     cta_ativo   = cfgs.get("piloto_cta_ativo") == "true"
     cta_botao   = cfgs.get("piloto_cta_botao", "")
     cta_url     = cfgs.get("piloto_cta_url", "")
+    cta_cor     = cfgs.get("piloto_cta_cor", "")
     arte_estilo = cfgs.get("piloto_arte_estilo", "")
 
     if not topico:
@@ -1379,7 +1405,10 @@ Retorne APENAS o texto do post, sem explicações."""
         "recorrencia": "nenhuma",
     }
     if cta_ativo and cta_botao and cta_url:
-        post_data["cta_botao"] = cta_botao
+        if cta_cor in CTA_CORES:
+            post_data["cta_botao"] = json.dumps([{"texto": cta_botao, "url": cta_url, "cor": cta_cor}], ensure_ascii=False)
+        else:
+            post_data["cta_botao"] = cta_botao
         post_data["cta_url"]   = cta_url
 
     # Gerar imagem se ativado
@@ -1421,7 +1450,7 @@ def piloto_status(request: Request):
     uid = require_user(request)
     chaves = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
               "piloto_imagem", "piloto_h_inicio", "piloto_h_fim", "piloto_ultimo_post", "piloto_log",
-              "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_arte_estilo"]
+              "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_cta_cor", "piloto_arte_estilo"]
     cfgs = get_cfgs(uid)
     cfg = {c: cfgs.get(c, "") for c in chaves}
     cfg.setdefault("piloto_ativo",     "false")
@@ -1445,7 +1474,7 @@ async def piloto_salvar(request: Request):
     body = await request.json()
     permitidos = ["piloto_ativo", "piloto_topico", "piloto_estilo", "piloto_posts_dia",
                   "piloto_imagem", "piloto_h_inicio", "piloto_h_fim",
-                  "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_arte_estilo"]
+                  "piloto_cta_ativo", "piloto_cta_botao", "piloto_cta_url", "piloto_cta_cor", "piloto_arte_estilo"]
     valores = {c: str(body[c]) for c in permitidos if c in body}
     ligando = False
     if valores.get("piloto_ativo") == "true":
